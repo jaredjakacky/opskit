@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-tag:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Validate semver tag on main
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "Release tags must be semver, such as v1.0.0 or v1.0.0-rc.1."
+            exit 1
+          fi
+
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release tag $tag must point at a commit reachable from main."
+            exit 1
+          fi
+
+  verify:
+    name: Verify (Go ${{ matrix.go-version }})
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version:
+          # renovate: datasource=custom.go-supported-floor depName=go-floor versioning=semver-coerced
+          - '1.25.x'
+          # renovate: datasource=custom.go-supported-latest depName=go-latest versioning=semver-coerced
+          - '1.26.x'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+          check-latest: true
+      - name: Run full verification suite
+        run: make verify
+
+  race:
+    name: Race (Go ${{ matrix.go-version }})
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version:
+          # renovate: datasource=custom.go-supported-floor depName=go-floor versioning=semver-coerced
+          - '1.25.x'
+          # renovate: datasource=custom.go-supported-latest depName=go-latest versioning=semver-coerced
+          - '1.26.x'
+    env:
+      CGO_ENABLED: '1'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+          check-latest: true
+      - name: Run race detector
+        run: make test-race
+
+  govulncheck:
+    name: govulncheck (Go ${{ matrix.go-version }})
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version:
+          # renovate: datasource=custom.go-supported-floor depName=go-floor versioning=semver-coerced
+          - '1.25.x'
+          # renovate: datasource=custom.go-supported-latest depName=go-latest versioning=semver-coerced
+          - '1.26.x'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+          check-latest: true
+      - name: Run govulncheck
+        run: make govulncheck
+
+  release:
+    name: release
+    needs: [validate-tag, verify, race, govulncheck]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
