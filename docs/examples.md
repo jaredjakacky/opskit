@@ -22,10 +22,10 @@ active check contracts. Opskit can discover `CheckDescriber`, `Checker`, and
 `CheckGroup` implementations, but it does not run them on an interval or decide
 retry policy.
 
-[`examples/commands`](../examples/commands) shows command request and result
-shapes. Opskit can discover a `CommandHandler`, but authentication,
-authorization, validation, dispatch, concurrency, and retries belong outside
-Opskit.
+[`examples/commands`](../examples/commands) shows passive command metadata and
+command request and result shapes. Opskit can discover `CommandDescriber` and
+`CommandHandler` implementations, but authentication, authorization,
+validation, dispatch, concurrency, and retries belong outside Opskit.
 
 ## Planned Examples
 
