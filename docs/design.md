@@ -566,9 +566,17 @@ Telemetry belongs where work happens:
 - outbound request telemetry belongs in the client package
 - dependency-check telemetry belongs in the dependency package
 
-Opskit values may be used by those systems, but Opskit does not become the
-telemetry system or freeze a shared event envelope before a producing kit needs
-one.
+Opskit may eventually define a small passive event envelope so sibling kits can
+describe operational events consistently without depending on a telemetry
+backend. That envelope is intentionally deferred until at least one producing
+kit, such as Servekit, Workerkit, Configkit, Clientkit, or Dependkit, has a
+concrete need.
+
+Until then, Opskit does not define event emission, event sinks, audit logging,
+telemetry backends, batching, transport, or a stable event schema. Sibling kits
+may use existing Opskit values such as ComponentInfo, Attribute, State, and
+Duration in their own local events, but those local shapes are not yet an
+Opskit compatibility contract.
 
 ## Standalone Use
 
