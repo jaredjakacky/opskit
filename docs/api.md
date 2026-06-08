@@ -464,6 +464,11 @@ Inspection is not a secret vault. Presentation layers may pass inspection data
 directly to admin endpoints, logs, or support tooling. Components are
 responsible for returning only safe, redacted data.
 
+`Summary` and `Details` must also be JSON-marshalable. Prefer strings, numbers,
+booleans, null values, slices, maps with string keys, or structs with stable JSON
+tags. Do not return functions, channels, cyclic values, non-finite floats, or
+values that require unavailable custom encoders.
+
 ## Checks
 
 Checks are active operational probes. Opskit defines the contract and data

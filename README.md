@@ -314,7 +314,7 @@ type Inspector interface {
 }
 ```
 
-Inspection data is intended for admin endpoints, diagnostics, support workflows, logs, and tests. Components are responsible for redacting inspection data before returning it.
+Inspection data is intended for admin endpoints, diagnostics, support workflows, logs, and tests. Components are responsible for redacting inspection data before returning it. `Summary` and `Details` must be JSON-marshalable.
 
 ### Checks and check groups
 

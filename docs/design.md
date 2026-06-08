@@ -423,6 +423,11 @@ Everything returned through Opskit must be safe to expose.
 Do not return secrets, tokens, raw connection strings, raw SQL, request bodies,
 private user data, or unredacted errors.
 
+`Summary` and `Details` must also be JSON-marshalable. Prefer strings, numbers,
+booleans, null values, slices, maps with string keys, or structs with stable JSON
+tags. Do not return functions, channels, cyclic values, non-finite floats, or
+values that require unavailable custom encoders.
+
 Opskit does not redact inspection data. Components must return safe data before
 it enters the registry.
 
