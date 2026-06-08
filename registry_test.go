@@ -56,6 +56,96 @@ func TestRegistryRegisterAndLookup(t *testing.T) {
 	}
 }
 
+func TestRegistryEntries(t *testing.T) {
+	var registry Registry
+
+	first := testComponent{
+		info:   ComponentInfo{Name: "first", Kind: "test"},
+		status: ReadyStatus("first ready"),
+	}
+	second := &testOperationalComponent{
+		info:   ComponentInfo{Name: "second", Kind: "operational"},
+		status: ReadyStatus("second ready"),
+	}
+
+	if err := registry.Register(first); err != nil {
+		t.Fatalf("Register(first) error = %v", err)
+	}
+	if err := registry.Register(second, Optional()); err != nil {
+		t.Fatalf("Register(second) error = %v", err)
+	}
+
+	entries := registry.Entries()
+
+	if len(entries) != 2 {
+		t.Fatalf("Entries length = %d, want 2", len(entries))
+	}
+	if entries[0].Component != first.info {
+		t.Fatalf("Entries[0].Component = %+v, want %+v", entries[0].Component, first.info)
+	}
+	if entries[0].Registration.ReadinessPolicy != ReadinessRequired {
+		t.Fatalf("Entries[0].Registration.ReadinessPolicy = %q, want %q", entries[0].Registration.ReadinessPolicy, ReadinessRequired)
+	}
+	if entries[0].Capabilities != (ComponentCapabilities{}) {
+		t.Fatalf("Entries[0].Capabilities = %+v, want none", entries[0].Capabilities)
+	}
+	if entries[1].Component != second.info {
+		t.Fatalf("Entries[1].Component = %+v, want %+v", entries[1].Component, second.info)
+	}
+	if entries[1].Registration.ReadinessPolicy != ReadinessOptional {
+		t.Fatalf("Entries[1].Registration.ReadinessPolicy = %q, want %q", entries[1].Registration.ReadinessPolicy, ReadinessOptional)
+	}
+	if !entries[1].Capabilities.ReadinessContributor ||
+		!entries[1].Capabilities.Inspector ||
+		!entries[1].Capabilities.Checker ||
+		!entries[1].Capabilities.CheckDescriber ||
+		!entries[1].Capabilities.CheckGroup ||
+		!entries[1].Capabilities.CommandHandler ||
+		!entries[1].Capabilities.CommandDescriber {
+		t.Fatalf("Entries[1].Capabilities = %+v, want all optional capabilities", entries[1].Capabilities)
+	}
+
+	entries[0].Component.Name = "mutated"
+	entries = registry.Entries()
+	if entries[0].Component.Name != "first" {
+		t.Fatalf("Entries returned mutable registry slice, first name = %q", entries[0].Component.Name)
+	}
+}
+
+func TestRegistryEntriesEmpty(t *testing.T) {
+	var registry Registry
+
+	entries := registry.Entries()
+	if len(entries) != 0 {
+		t.Fatalf("Entries length = %d, want 0", len(entries))
+	}
+	if entries == nil {
+		t.Fatal("Entries = nil, want empty slice")
+	}
+}
+
+func TestRegistryEntriesDoesNotInvokeComponentMethods(t *testing.T) {
+	var registry Registry
+
+	component := &countingComponent{
+		info:   ComponentInfo{Name: "component", Kind: "test"},
+		status: ReadyStatus("ready"),
+	}
+
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register(component) error = %v", err)
+	}
+
+	entries := registry.Entries()
+
+	if len(entries) != 1 {
+		t.Fatalf("Entries length = %d, want 1", len(entries))
+	}
+	if component.statusCalls != 0 {
+		t.Fatalf("Status calls = %d, want 0", component.statusCalls)
+	}
+}
+
 func TestRegistryRegisterRejectsNilAndDuplicateComponents(t *testing.T) {
 	registry := NewRegistry()
 

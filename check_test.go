@@ -378,17 +378,29 @@ func TestSummarizeChecksPreservesMessage(t *testing.T) {
 
 func TestCloneNamedChecks(t *testing.T) {
 	results := []NamedCheck{
-		{Name: "cache", Kind: "dependency", Result: ReadyCheck("ready", 0)},
+		{
+			Name: "cache",
+			Kind: "dependency",
+			Result: ReadyCheck(
+				"ready",
+				0,
+				Attr("target", "cache"),
+			),
+		},
 	}
 
 	cloned := cloneNamedChecks(results)
 	results[0].Name = "mutated"
+	results[0].Result.Attributes[0] = Attr("target", "mutated")
 
 	if len(cloned) != 1 {
 		t.Fatalf("cloned length = %d, want 1", len(cloned))
 	}
 	if cloned[0].Name != "cache" {
 		t.Fatalf("cloned[0].Name = %q, want cache", cloned[0].Name)
+	}
+	if cloned[0].Result.Attributes[0] != Attr("target", "cache") {
+		t.Fatalf("cloned[0].Result.Attributes = %+v, want target cache", cloned[0].Result.Attributes)
 	}
 	if got := cloneNamedChecks(nil); got != nil {
 		t.Fatalf("cloneNamedChecks(nil) = %+v, want nil", got)

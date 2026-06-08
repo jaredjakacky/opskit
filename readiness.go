@@ -49,6 +49,44 @@ func NotReadyReadiness(reason string, components ...ReadinessItem) Readiness {
 	}
 }
 
+// ReadinessFromItems builds a readiness result whose aggregate readiness is
+// derived from the supplied readiness items.
+func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness {
+	components := normalizeReadinessItems(items)
+
+	if len(components) == 0 {
+		if reason == "" {
+			reason = "no readiness items"
+		}
+		return Readiness{
+			Ready:  false,
+			Reason: reason,
+		}
+	}
+
+	ready := true
+	for _, item := range components {
+		if !item.Ready {
+			ready = false
+			break
+		}
+	}
+
+	if reason == "" {
+		if ready {
+			reason = "all readiness items ready"
+		} else {
+			reason = "one or more readiness items are not ready"
+		}
+	}
+
+	return Readiness{
+		Ready:      ready,
+		Reason:     reason,
+		Components: components,
+	}
+}
+
 // ReadinessFromStatus builds a readiness result from component status.
 func ReadinessFromStatus(info ComponentInfo, status Status) Readiness {
 	reason := "component ready"
@@ -83,5 +121,18 @@ func cloneReadinessItems(items []ReadinessItem) []ReadinessItem {
 
 	cloned := make([]ReadinessItem, len(items))
 	copy(cloned, items)
+	return cloned
+}
+
+func normalizeReadinessItems(items []ReadinessItem) []ReadinessItem {
+	if len(items) == 0 {
+		return nil
+	}
+
+	cloned := make([]ReadinessItem, len(items))
+	for i, item := range items {
+		item.State = normalizeReadinessItemState(item.Ready, item.State)
+		cloned[i] = item
+	}
 	return cloned
 }
