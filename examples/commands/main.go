@@ -64,6 +64,11 @@ func main() {
 	registry := opskit.NewRegistry()
 	registry.MustRegister(cacheAdmin{}, opskit.Informational())
 
+	commands, err := registry.Commands(ctx, "cache-admin")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	handler, err := registry.CommandHandler("cache-admin")
 	if err != nil {
 		log.Fatal(err)
@@ -74,6 +79,10 @@ func main() {
 		Payload: json.RawMessage(`{"force":true}`),
 	}
 
+	fmt.Println("described commands")
+	printJSON(commands)
+
+	fmt.Println("command result")
 	printJSON(handler.HandleCommand(ctx, request))
 }
 
