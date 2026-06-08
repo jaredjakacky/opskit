@@ -542,6 +542,10 @@ type CommandDescriber interface {
 }
 ```
 
+The handler method is named `HandleCommand` rather than `Command` because it is
+the active operation on a handler. That keeps the method distinct from command
+metadata and avoids treating the command noun as a verb.
+
 `CommandDescriber` is passive command metadata. It lets presentation layers,
 CLIs, worker runtimes, and docs generators discover supported command names and
 operator-facing hints without invoking the command.
