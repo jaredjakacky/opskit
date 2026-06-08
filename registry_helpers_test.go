@@ -116,6 +116,7 @@ func TestCapabilitiesOf(t *testing.T) {
 	if !full.ReadinessContributor ||
 		!full.Inspector ||
 		!full.Checker ||
+		!full.CheckDescriber ||
 		!full.CheckGroup ||
 		!full.CommandHandler ||
 		!full.CommandDescriber {

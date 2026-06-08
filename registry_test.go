@@ -365,6 +365,7 @@ func TestRegistrySnapshotIncludesCapabilitiesReadinessAndInspection(t *testing.T
 	if !snapshot.Capabilities.ReadinessContributor ||
 		!snapshot.Capabilities.Inspector ||
 		!snapshot.Capabilities.Checker ||
+		!snapshot.Capabilities.CheckDescriber ||
 		!snapshot.Capabilities.CheckGroup ||
 		!snapshot.Capabilities.CommandHandler ||
 		!snapshot.Capabilities.CommandDescriber {
@@ -576,6 +577,16 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 		status:     ReadyStatus("ready"),
 		readiness:  ReadyReadiness("ready"),
 		inspection: Inspection{Summary: "ok"},
+		checks: []CheckDescriptor{
+			{
+				Name:        "cache",
+				Kind:        "dependency",
+				Description: "ping cache",
+				Attributes: []Attribute{
+					Attr("target", "cache"),
+				},
+			},
+		},
 		commands: []CommandDescriptor{
 			{
 				Name:        "test/run",
@@ -601,6 +612,28 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 
 	if _, err := registry.Checker("operational"); err != nil {
 		t.Fatalf("Checker(operational) error = %v", err)
+	}
+	if _, err := registry.CheckDescriber("operational"); err != nil {
+		t.Fatalf("CheckDescriber(operational) error = %v", err)
+	}
+	checks, err := registry.Checks(context.Background(), "operational")
+	if err != nil {
+		t.Fatalf("Checks(operational) error = %v", err)
+	}
+	if len(checks) != 1 || checks[0].Name != "cache" {
+		t.Fatalf("Checks(operational) = %+v, want cache check", checks)
+	}
+	checks[0].Name = "mutated"
+	checks[0].Attributes[0] = Attr("mutated", "true")
+	checks, err = registry.Checks(context.Background(), "operational")
+	if err != nil {
+		t.Fatalf("Checks(operational) second call error = %v", err)
+	}
+	if checks[0].Name != "cache" {
+		t.Fatalf("Checks returned mutable check descriptors, name = %q", checks[0].Name)
+	}
+	if checks[0].Attributes[0] != Attr("target", "cache") {
+		t.Fatalf("Checks returned mutable check attributes, attributes = %+v", checks[0].Attributes)
 	}
 	if _, err := registry.CheckGroup("operational"); err != nil {
 		t.Fatalf("CheckGroup(operational) error = %v", err)
@@ -634,6 +667,12 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	if _, err := registry.Checker("plain"); err != ErrCheckerUnsupported {
 		t.Fatalf("Checker(plain) error = %v, want %v", err, ErrCheckerUnsupported)
 	}
+	if _, err := registry.CheckDescriber("plain"); err != ErrCheckDescriberUnsupported {
+		t.Fatalf("CheckDescriber(plain) error = %v, want %v", err, ErrCheckDescriberUnsupported)
+	}
+	if _, err := registry.Checks(context.Background(), "plain"); err != ErrCheckDescriberUnsupported {
+		t.Fatalf("Checks(plain) error = %v, want %v", err, ErrCheckDescriberUnsupported)
+	}
 	if _, err := registry.CheckGroup("plain"); err != ErrCheckGroupUnsupported {
 		t.Fatalf("CheckGroup(plain) error = %v, want %v", err, ErrCheckGroupUnsupported)
 	}
@@ -650,6 +689,12 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	if _, err := registry.Checker("missing"); err != ErrComponentNotFound {
 		t.Fatalf("Checker(missing) error = %v, want %v", err, ErrComponentNotFound)
 	}
+	if _, err := registry.CheckDescriber("missing"); err != ErrComponentNotFound {
+		t.Fatalf("CheckDescriber(missing) error = %v, want %v", err, ErrComponentNotFound)
+	}
+	if _, err := registry.Checks(context.Background(), "missing"); err != ErrComponentNotFound {
+		t.Fatalf("Checks(missing) error = %v, want %v", err, ErrComponentNotFound)
+	}
 	if _, err := registry.CheckGroup("missing"); err != ErrComponentNotFound {
 		t.Fatalf("CheckGroup(missing) error = %v, want %v", err, ErrComponentNotFound)
 	}
@@ -665,6 +710,9 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
+	if _, err := registry.Checks(canceled, "operational"); err != context.Canceled {
+		t.Fatalf("Checks(canceled) error = %v, want %v", err, context.Canceled)
+	}
 	if _, err := registry.Commands(canceled, "operational"); err != context.Canceled {
 		t.Fatalf("Commands(canceled) error = %v, want %v", err, context.Canceled)
 	}
@@ -879,6 +927,7 @@ type testOperationalComponent struct {
 	status     Status
 	readiness  Readiness
 	inspection Inspection
+	checks     []CheckDescriptor
 	commands   []CommandDescriptor
 }
 
@@ -900,6 +949,23 @@ func (c *testOperationalComponent) Inspect(context.Context) (Inspection, error) 
 
 func (c *testOperationalComponent) Check(context.Context) CheckResult {
 	return ReadyCheck("ready", 0)
+}
+
+func (c *testOperationalComponent) Checks(context.Context) []CheckDescriptor {
+	if c.checks != nil {
+		return c.checks
+	}
+
+	return []CheckDescriptor{
+		{
+			Name:        "cache",
+			Kind:        "dependency",
+			Description: "ping cache",
+			Attributes: []Attribute{
+				Attr("target", "cache"),
+			},
+		},
+	}
 }
 
 func (c *testOperationalComponent) CheckAll(context.Context) CheckSummary {

@@ -386,6 +386,7 @@ var (
 	ErrComponentNotFound
 	ErrInspectionUnsupported
 	ErrCheckerUnsupported
+	ErrCheckDescriberUnsupported
 	ErrCheckGroupUnsupported
 	ErrCommandHandlerUnsupported
 	ErrCommandDescriberUnsupported
@@ -405,6 +406,7 @@ type ComponentCapabilities struct {
 	ReadinessContributor bool `json:"readiness_contributor,omitempty"`
 	Inspector            bool `json:"inspector,omitempty"`
 	Checker              bool `json:"checker,omitempty"`
+	CheckDescriber       bool `json:"check_describer,omitempty"`
 	CheckGroup           bool `json:"check_group,omitempty"`
 	CommandHandler       bool `json:"command_handler,omitempty"`
 	CommandDescriber     bool `json:"command_describer,omitempty"`
@@ -417,6 +419,8 @@ It also exposes typed accessors:
 ```go
 func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error)
 func (r *Registry) Checker(name string) (Checker, error)
+func (r *Registry) CheckDescriber(name string) (CheckDescriber, error)
+func (r *Registry) Checks(ctx context.Context, name string) ([]CheckDescriptor, error)
 func (r *Registry) CheckGroup(name string) (CheckGroup, error)
 func (r *Registry) CommandHandler(name string) (CommandHandler, error)
 func (r *Registry) CommandDescriber(name string) (CommandDescriber, error)
@@ -461,6 +465,10 @@ type Checker interface {
 	Check(context.Context) CheckResult
 }
 
+type CheckDescriber interface {
+	Checks(context.Context) []CheckDescriptor
+}
+
 type CheckGroup interface {
 	CheckAll(context.Context) CheckSummary
 }
@@ -475,6 +483,26 @@ type CheckGroupFunc func(context.Context) CheckSummary
 
 Nil `CheckFunc` and `CheckGroupFunc` values return unknown, not-ready results
 instead of panicking. Nil contexts are normalized.
+
+`CheckDescriber` is passive metadata. It helps admin surfaces, CLIs, worker
+runtimes, and docs generators list supported checks without running them. The
+descriptors are advisory; callers still own scheduling, execution, retry,
+caching, timeout, concurrency, and readiness policy.
+
+### `CheckDescriptor`
+
+```go
+type CheckDescriptor struct {
+	Name        string      `json:"name"`
+	Kind        string      `json:"kind,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Attributes  []Attribute `json:"attributes,omitempty"`
+}
+```
+
+`Kind` should be a low-cardinality category such as `dependency`, `filesystem`,
+`queue`, or `client`. Attributes are operational metadata and must be safe to
+expose.
 
 ### `CheckResult`
 

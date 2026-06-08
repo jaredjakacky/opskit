@@ -24,6 +24,27 @@ func (dependencyChecks) Status(context.Context) opskit.Status {
 	return opskit.DegradedStatus("one dependency check is failing")
 }
 
+func (dependencyChecks) Checks(context.Context) []opskit.CheckDescriptor {
+	return []opskit.CheckDescriptor{
+		{
+			Name:        "database",
+			Kind:        "dependency",
+			Description: "ping database",
+			Attributes: []opskit.Attribute{
+				opskit.Attr("target", "database"),
+			},
+		},
+		{
+			Name:        "cache",
+			Kind:        "dependency",
+			Description: "ping primary cache",
+			Attributes: []opskit.Attribute{
+				opskit.Attr("target", "cache"),
+			},
+		},
+	}
+}
+
 func (dependencyChecks) Check(context.Context) opskit.CheckResult {
 	return opskit.FailedCheck(
 		"primary cache ping failed",
@@ -68,7 +89,15 @@ func main() {
 		log.Fatal(err)
 	}
 
+	checks, err := registry.Checks(ctx, "dependencies")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// The registry discovers the capability. The caller decides when to execute it.
+	fmt.Println("described checks")
+	printJSON(checks)
+
 	fmt.Println("single check")
 	printJSON(checker.Check(ctx))
 

@@ -59,11 +59,13 @@ func TestComponentCapabilitiesJSONIncludesSupportedCapabilities(t *testing.T) {
 		ReadinessContributor: true,
 		Inspector:            true,
 		Checker:              true,
+		CheckDescriber:       true,
 		CheckGroup:           true,
 		CommandHandler:       true,
+		CommandDescriber:     true,
 	}
 
-	requireJSON(t, capabilities, `{"readiness_contributor":true,"inspector":true,"checker":true,"check_group":true,"command_handler":true}`)
+	requireJSON(t, capabilities, `{"readiness_contributor":true,"inspector":true,"checker":true,"check_describer":true,"check_group":true,"command_handler":true,"command_describer":true}`)
 }
 
 func TestComponentSnapshotJSONOmitsPointerViews(t *testing.T) {

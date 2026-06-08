@@ -133,6 +133,61 @@ func TestFailedCheckClonesAttributes(t *testing.T) {
 	}
 }
 
+func TestCheckDescriptorJSON(t *testing.T) {
+	descriptor := CheckDescriptor{
+		Name:        "cache",
+		Kind:        "dependency",
+		Description: "ping primary cache",
+		Attributes: []Attribute{
+			Attr("target", "cache"),
+		},
+	}
+
+	data, err := json.Marshal(descriptor)
+	if err != nil {
+		t.Fatalf("Marshal CheckDescriptor error = %v", err)
+	}
+
+	want := `{"name":"cache","kind":"dependency","description":"ping primary cache","attributes":[{"key":"target","value":"cache"}]}`
+	if string(data) != want {
+		t.Fatalf("Marshal CheckDescriptor = %s, want %s", data, want)
+	}
+}
+
+func TestCheckDescriptorJSONOmitEmptyFields(t *testing.T) {
+	data, err := json.Marshal(CheckDescriptor{Name: "cache"})
+	if err != nil {
+		t.Fatalf("Marshal CheckDescriptor error = %v", err)
+	}
+
+	want := `{"name":"cache"}`
+	if string(data) != want {
+		t.Fatalf("Marshal CheckDescriptor = %s, want %s", data, want)
+	}
+}
+
+func TestCloneCheckDescriptors(t *testing.T) {
+	input := []CheckDescriptor{
+		{
+			Name: "cache",
+			Attributes: []Attribute{
+				Attr("target", "cache"),
+			},
+		},
+	}
+
+	cloned := cloneCheckDescriptors(input)
+	input[0].Name = "mutated"
+	input[0].Attributes[0] = Attr("target", "mutated")
+
+	if cloned[0].Name != "cache" {
+		t.Fatalf("cloned[0].Name = %q, want cache", cloned[0].Name)
+	}
+	if cloned[0].Attributes[0] != Attr("target", "cache") {
+		t.Fatalf("cloned[0].Attributes = %+v, want target cache", cloned[0].Attributes)
+	}
+}
+
 func TestCheckFunc(t *testing.T) {
 	ctx := context.Background()
 	checker := CheckFunc(func(got context.Context) CheckResult {

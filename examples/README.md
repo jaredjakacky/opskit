@@ -29,8 +29,9 @@ readiness policy, inspection, checks, and commands.
   A component that implements `Inspector` and returns safe diagnostic data in a
   component snapshot.
 - [checks](checks)
-  Passive `Checker` and `CheckGroup` capability discovery, plus explicit check
-  execution outside the registry's passive status/readiness path.
+  Passive `CheckDescriber`, `Checker`, and `CheckGroup` capability discovery,
+  plus explicit check execution outside the registry's passive status/readiness
+  path.
 - [commands](commands)
   Passive `CommandHandler` discovery and one explicit operational command
   invocation with an opaque JSON payload.

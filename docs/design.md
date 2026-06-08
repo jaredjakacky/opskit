@@ -189,6 +189,10 @@ type Checker interface {
 	Check(context.Context) CheckResult
 }
 
+type CheckDescriber interface {
+	Checks(context.Context) []CheckDescriptor
+}
+
 type CheckGroup interface {
 	CheckAll(context.Context) CheckSummary
 }
@@ -221,6 +225,8 @@ classDiagram
     +Snapshot(ctx, name) (ComponentSnapshot, error)
     +Inspect(ctx, name) (Inspection, error)
     +Checker(name) (Checker, error)
+    +CheckDescriber(name) (CheckDescriber, error)
+    +Checks(ctx, name) ([]CheckDescriptor, error)
     +CheckGroup(name) (CheckGroup, error)
     +CommandHandler(name) (CommandHandler, error)
     +CommandDescriber(name) (CommandDescriber, error)
@@ -248,6 +254,11 @@ classDiagram
     +Check(ctx) CheckResult
   }
 
+  class CheckDescriber {
+    <<interface>>
+    +Checks(ctx) []CheckDescriptor
+  }
+
   class CheckGroup {
     <<interface>>
     +CheckAll(ctx) CheckSummary
@@ -272,6 +283,7 @@ classDiagram
   Component <|.. ReadinessContributor : optional
   Component <|.. Inspector : optional
   Component <|.. Checker : optional
+  Component <|.. CheckDescriber : optional
   Component <|.. CheckGroup : optional
   Component <|.. CommandHandler : optional
   Component <|.. CommandDescriber : optional
@@ -489,10 +501,18 @@ type Checker interface {
 	Check(context.Context) CheckResult
 }
 
+type CheckDescriber interface {
+	Checks(context.Context) []CheckDescriptor
+}
+
 type CheckGroup interface {
 	CheckAll(context.Context) CheckSummary
 }
 ```
+
+`CheckDescriber` is passive check metadata. It lets presentation layers, CLIs,
+worker runtimes, and docs generators discover supported check names and
+operator-facing hints without running the checks.
 
 Opskit does not decide when checks run. It does not schedule them, retry them,
 cache them, or decide whether they should affect readiness.

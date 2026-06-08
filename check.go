@@ -22,9 +22,26 @@ type CheckResult struct {
 	Attributes []Attribute `json:"attributes,omitempty"`
 }
 
+// CheckDescriptor describes one supported operational check.
+//
+// Descriptors are passive metadata for presentation, documentation, and
+// execution layers. They do not schedule, execute, retry, cache, or apply
+// policy to checks.
+type CheckDescriptor struct {
+	Name        string      `json:"name"`
+	Kind        string      `json:"kind,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Attributes  []Attribute `json:"attributes,omitempty"`
+}
+
 // Checker performs one operational check.
 type Checker interface {
 	Check(context.Context) CheckResult
+}
+
+// CheckDescriber reports the operational checks a component supports.
+type CheckDescriber interface {
+	Checks(context.Context) []CheckDescriptor
 }
 
 // CheckSummary describes the aggregate result of a group of operational checks.
@@ -228,5 +245,18 @@ func cloneNamedChecks(results []NamedCheck) []NamedCheck {
 
 	cloned := make([]NamedCheck, len(results))
 	copy(cloned, results)
+	return cloned
+}
+
+func cloneCheckDescriptors(checks []CheckDescriptor) []CheckDescriptor {
+	if len(checks) == 0 {
+		return nil
+	}
+
+	cloned := make([]CheckDescriptor, len(checks))
+	for i, check := range checks {
+		check.Attributes = cloneAttributes(check.Attributes)
+		cloned[i] = check
+	}
 	return cloned
 }

@@ -59,6 +59,7 @@ func capabilitiesOf(component Component) ComponentCapabilities {
 	_, readinessContributor := component.(ReadinessContributor)
 	_, inspector := component.(Inspector)
 	_, checker := component.(Checker)
+	_, checkDescriber := component.(CheckDescriber)
 	_, checkGroup := component.(CheckGroup)
 	_, commandHandler := component.(CommandHandler)
 	_, commandDescriber := component.(CommandDescriber)
@@ -67,6 +68,7 @@ func capabilitiesOf(component Component) ComponentCapabilities {
 		ReadinessContributor: readinessContributor,
 		Inspector:            inspector,
 		Checker:              checker,
+		CheckDescriber:       checkDescriber,
 		CheckGroup:           checkGroup,
 		CommandHandler:       commandHandler,
 		CommandDescriber:     commandDescriber,
