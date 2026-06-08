@@ -34,7 +34,12 @@ type CheckDescriptor struct {
 	Attributes  []Attribute `json:"attributes,omitempty"`
 }
 
-// Checker performs one operational check.
+// Checker performs one active operational check.
+//
+// Check is an execution hook. Opskit does not schedule it, wrap it with
+// timeout or panic recovery, retry it, authorize it, audit it, limit its
+// concurrency, or export telemetry for it. Callers that invoke Check own those
+// policies.
 type Checker interface {
 	Check(context.Context) CheckResult
 }
@@ -61,7 +66,12 @@ type NamedCheck struct {
 	Result CheckResult `json:"result"`
 }
 
-// CheckGroup performs a group of operational checks.
+// CheckGroup performs a group of active operational checks.
+//
+// CheckAll is an execution hook. Opskit does not schedule it, wrap it with
+// timeout or panic recovery, retry it, authorize it, audit it, limit its
+// concurrency, or export telemetry for it. Callers that invoke CheckAll own
+// those policies.
 type CheckGroup interface {
 	CheckAll(context.Context) CheckSummary
 }

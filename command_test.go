@@ -59,6 +59,50 @@ func TestCommandRequestPayloadRawMessageRoundTrip(t *testing.T) {
 	}
 }
 
+func TestNewCommandRequest(t *testing.T) {
+	payload := json.RawMessage(`{"force":true}`)
+	attrs := []Attribute{
+		Attr("requested_by", "admin"),
+	}
+
+	request := NewCommandRequest("cache/refresh", payload, attrs...)
+	payload[9] = 'f'
+	attrs[0] = Attr("requested_by", "mutated")
+
+	if request.Name != "cache/refresh" {
+		t.Fatalf("Name = %q, want cache/refresh", request.Name)
+	}
+	if string(request.Payload) != `{"force":true}` {
+		t.Fatalf("Payload = %s, want original payload", request.Payload)
+	}
+	if request.RequestedAt == nil {
+		t.Fatal("RequestedAt is nil")
+	}
+	if request.RequestedAt.Location() != time.UTC {
+		t.Fatalf("RequestedAt location = %q, want UTC", request.RequestedAt.Location())
+	}
+	if len(request.Attributes) != 1 {
+		t.Fatalf("Attributes length = %d, want 1", len(request.Attributes))
+	}
+	if request.Attributes[0] != Attr("requested_by", "admin") {
+		t.Fatalf("Attributes[0] = %+v, want requested_by admin", request.Attributes[0])
+	}
+}
+
+func TestNewCommandRequestWithEmptyPayload(t *testing.T) {
+	request := NewCommandRequest("", nil)
+
+	if request.Name != "" {
+		t.Fatalf("Name = %q, want empty", request.Name)
+	}
+	if request.Payload != nil {
+		t.Fatalf("Payload = %s, want nil", request.Payload)
+	}
+	if request.RequestedAt == nil {
+		t.Fatal("RequestedAt is nil")
+	}
+}
+
 func TestCommandDescriptorJSON(t *testing.T) {
 	descriptor := CommandDescriptor{
 		Name:        "cache/refresh",

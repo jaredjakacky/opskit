@@ -21,6 +21,19 @@ type CommandRequest struct {
 	Attributes  []Attribute     `json:"attributes,omitempty"`
 }
 
+// NewCommandRequest returns a command request with the current UTC timestamp.
+//
+// NewCommandRequest does not validate the command name or payload. Callers that
+// need a custom RequestedAt value can construct CommandRequest directly.
+func NewCommandRequest(name string, payload json.RawMessage, attrs ...Attribute) CommandRequest {
+	return CommandRequest{
+		Name:        name,
+		Payload:     cloneRawMessage(payload),
+		RequestedAt: nowUTC(),
+		Attributes:  cloneAttributes(attrs),
+	}
+}
+
 // CommandDescriptor describes one supported operational command.
 //
 // Descriptors are passive metadata for presentation, documentation, and
@@ -62,7 +75,12 @@ type CommandResult struct {
 	Attributes []Attribute `json:"attributes,omitempty"`
 }
 
-// CommandHandler handles an operational command.
+// CommandHandler handles an active operational command.
+//
+// HandleCommand is an execution hook. Opskit does not dispatch it, wrap it with
+// timeout or panic recovery, retry it, authorize it, audit it, limit its
+// concurrency, validate its payload, or export telemetry for it. Callers that
+// invoke HandleCommand own those policies.
 type CommandHandler interface {
 	HandleCommand(context.Context, CommandRequest) CommandResult
 }
@@ -82,6 +100,16 @@ func cloneCommandDescriptors(commands []CommandDescriptor) []CommandDescriptor {
 		command.Attributes = cloneAttributes(command.Attributes)
 		cloned[i] = command
 	}
+	return cloned
+}
+
+func cloneRawMessage(payload json.RawMessage) json.RawMessage {
+	if len(payload) == 0 {
+		return nil
+	}
+
+	cloned := make(json.RawMessage, len(payload))
+	copy(cloned, payload)
 	return cloned
 }
 

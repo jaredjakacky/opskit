@@ -67,7 +67,7 @@ Opskit pulls the common language into one small package. A component can say:
 - whether it supports active checks
 - whether it supports grouped checks
 - whether it supports operational commands
-- what safe attributes it emits
+- what safe attributes it exposes
 
 The application still owns policy. Opskit only gives the policy a stable shape.
 

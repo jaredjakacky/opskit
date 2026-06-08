@@ -131,10 +131,10 @@ context for admin surfaces.
 
 `ComponentInfo` does not currently include labels. Stable operational metadata
 belongs on `Attribute` fields in the relevant read model, such as status,
-inspection, check descriptors, command descriptors, command requests or results,
-and future event records if Opskit later defines an event envelope. Opskit may
-add identity-level labels later if sibling kits demonstrate a concrete need
-before those read models are available.
+readiness, inspection, check descriptors or results, command descriptors,
+command requests or results, and future event records if Opskit later defines
+an event envelope. Opskit may add identity-level labels later if sibling kits
+demonstrate a concrete need before those read models are available.
 
 ### `ComponentFunc`
 
@@ -681,11 +681,18 @@ type CommandRequest struct {
 	RequestedAt *time.Time      `json:"requested_at,omitempty"`
 	Attributes  []Attribute     `json:"attributes,omitempty"`
 }
+
+func NewCommandRequest(name string, payload json.RawMessage, attrs ...Attribute) CommandRequest
 ```
 
 `Payload` is command-specific raw JSON. Presentation layers that accept payloads
 from users must perform authentication, authorization, validation, and size
 limits before constructing a `CommandRequest`.
+
+`NewCommandRequest` sets `RequestedAt` to the current UTC time and defensively
+copies payload bytes and attributes. It does not validate command names or
+payloads. Callers that need a custom `RequestedAt` can construct
+`CommandRequest` directly.
 
 ### `CommandResult`
 
