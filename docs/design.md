@@ -167,9 +167,9 @@ type Component interface {
 
 `ComponentInfo` gives the component a stable operational identity. Identity is
 intentionally limited to name, kind, and description for now. Stable operational
-metadata should be represented with `Attribute` values on status, inspection,
-check descriptors, command descriptors, command requests or results, and future
-event records if Opskit later defines an event envelope.
+metadata should be represented with `Attribute` values on status, readiness,
+inspection, check descriptors or results, command descriptors, command requests
+or results, and future event records if Opskit later defines an event envelope.
 
 Opskit may add `ComponentInfo` labels later if sibling kits demonstrate a
 concrete need for stable identity-level metadata before active status,

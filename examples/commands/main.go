@@ -74,10 +74,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	request := opskit.CommandRequest{
-		Name:    "cache/refresh",
-		Payload: json.RawMessage(`{"force":true}`),
-	}
+	request := opskit.NewCommandRequest("cache/refresh", json.RawMessage(`{"force":true}`))
 
 	fmt.Println("described commands")
 	printJSON(commands)

@@ -389,6 +389,11 @@ func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error)
 }
 
 // Checker returns a registered component as a Checker.
+//
+// The returned Checker is a raw active execution handle. Registry.Checker only
+// discovers capability support; it does not invoke Check or provide timeout,
+// panic recovery, retry, authorization, auditing, concurrency control, or
+// telemetry.
 func (r *Registry) Checker(name string) (Checker, error) {
 	component, ok := r.Component(name)
 	if !ok {
@@ -445,6 +450,11 @@ func (r *Registry) Checks(ctx context.Context, name string) ([]CheckDescriptor, 
 }
 
 // CheckGroup returns a registered component as a CheckGroup.
+//
+// The returned CheckGroup is a raw active execution handle. Registry.CheckGroup
+// only discovers capability support; it does not invoke CheckAll or provide
+// timeout, panic recovery, retry, authorization, auditing, concurrency control,
+// or telemetry.
 func (r *Registry) CheckGroup(name string) (CheckGroup, error) {
 	component, ok := r.Component(name)
 	if !ok {
@@ -460,6 +470,12 @@ func (r *Registry) CheckGroup(name string) (CheckGroup, error) {
 }
 
 // CommandHandler returns a registered component as a CommandHandler.
+//
+// The returned CommandHandler is a raw active execution handle.
+// Registry.CommandHandler only discovers capability support; it does not invoke
+// HandleCommand or provide dispatch, timeout, panic recovery, retry,
+// authorization, auditing, concurrency control, payload validation, or
+// telemetry.
 func (r *Registry) CommandHandler(name string) (CommandHandler, error) {
 	component, ok := r.Component(name)
 	if !ok {
