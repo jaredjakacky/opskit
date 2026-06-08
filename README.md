@@ -120,19 +120,10 @@ presented and when active capabilities are invoked.
 
 ## What Opskit is not
 
-Opskit is not an HTTP server. Servekit owns routing, probes, middleware, auth gates, response encoding, and admin presentation.
-
-Opskit is not a worker runtime. Workerkit owns lifecycle, loops, scheduling, retries, command dispatch, command admission, concurrency limits, shutdown, and execution policy.
-
-Opskit is not a configuration loader. Configkit owns typed configuration lifecycle, validation, redaction, reload bookkeeping, and last-known-good behavior.
-
-Opskit is not a dependency-health engine. Dependkit owns dependency registration, check execution records, stale state, readiness policy, and dependency status.
-
-Opskit is not an outbound client framework. Clientkit owns HTTP client construction, outbound policy, retries, propagation, classification, and client health.
-
-Opskit is not a state manager. Statekit owns application state lifecycle, state inspection, state transition reporting, persistence coordination, and state-specific policy.
-
-Opskit is not a telemetry backend, dashboard, alerting system, service mesh, dependency injection container, workflow engine, scheduler, or application framework.
+Opskit is not the service runtime. It does not own HTTP routing, worker loops,
+configuration loading, dependency execution, outbound client construction, state
+management, telemetry exporting, dashboards, dependency injection, scheduling,
+authorization, or application lifecycle.
 
 Opskit does not execute checks or commands. `Checker`, `CheckGroup`, and `CommandHandler` are passive contracts. A runtime such as Workerkit decides when and how to execute them.
 
@@ -385,53 +376,9 @@ The zero value is ready to use.
 
 Opskit is not the application host. It is the shared operations contract used at service assembly boundaries.
 
-A composed service might eventually look like this:
-
-```go
-ops := opskit.NewRegistry()
-
-ops.MustRegister(configkitops.Component(configManager), opskit.Required())
-ops.MustRegister(workerkitops.Component(runtime), opskit.Required())
-ops.MustRegister(dependkitops.Component(dependencies), opskit.Required())
-ops.MustRegister(clientkitops.Component(clients), opskit.Required())
-ops.MustRegister(statekitops.Component(stateManager), opskit.Required())
-ops.MustRegister(buildInfoComponent, opskit.Informational())
-```
-
-> **Planned integration: Kit Series adapters**
->
-> This is the intended composition shape, not runnable code today. Configkit,
-> Workerkit, Dependkit, Clientkit, and Statekit still need stable Opskit
-> component/adaptor packages before this example can become real.
-
-Servekit can present the registry:
-
-```go
-server := servekit.New(
-	servekit.WithOpsReadiness(ops),
-	servekit.WithOpsAdmin(ops, servekit.WithAuthGate(requireAdmin)),
-)
-```
-
-> **Planned integration: Servekit presentation**
->
-> Servekit has not yet been updated with stable `WithOpsReadiness` or
-> `WithOpsAdmin` APIs. Once that lands, add runnable `servekit-readiness` and
-> `servekit-admin` examples and replace this illustrative snippet with verified
-> code.
-
-Workerkit can execute active operational work:
-
-```go
-runtime.Register(opskitworker.CheckGroupWorker(ops))
-runtime.Register(opskitworker.CommandWorker(ops))
-```
-
-> **Planned integration: Workerkit execution**
->
-> Workerkit has not yet been updated with stable Opskit check or command worker
-> adapters. Once that lands, add a runnable `workerkit-checks` example and
-> replace this illustrative snippet with verified code.
+The intended Kit Series shape is simple: domain kits report operational state
+through Opskit contracts, Servekit presents that state, and Workerkit executes
+active checks or commands under runtime policy.
 
 The exact adapter names may differ by package, but the boundary should remain stable:
 
@@ -440,6 +387,9 @@ The exact adapter names may differ by package, but the boundary should remain st
 - Workerkit decides when and how to execute active work.
 - Domain kits decide what their state means.
 - Applications decide policy.
+
+See [Composition Guide](docs/composition.md) for the planned Servekit,
+Workerkit, and domain-kit adapter shape.
 
 ## Why This Works
 
@@ -500,12 +450,8 @@ Recommended reading order:
 4. [`examples/checks`](examples/checks)
 5. [`examples/commands`](examples/commands)
 
-> **Coming after v0.1: Kit Series examples**
->
-> `servekit-readiness`, `servekit-admin`, `workerkit-checks`,
-> `kit-series-composition`, and `production-composition` are intentionally not
-> present yet. They depend on sibling-kit adapters that do not exist. The planned
-> examples are listed in [`examples/README.md`](examples/README.md).
+Kit Series integration examples will be added after the sibling adapters exist.
+The planned examples are listed in [`examples/README.md`](examples/README.md).
 
 ## API Reference
 
