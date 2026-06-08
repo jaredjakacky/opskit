@@ -169,7 +169,9 @@ snapshot, err := ops.Snapshot(ctx, "cache")
 ```
 
 Inspection data may flow directly to logs, admin endpoints, and support tools.
-Redact before returning it.
+Redact before returning it. `Summary` and `Details` must be JSON-marshalable:
+prefer strings, numbers, booleans, null values, slices, maps with string keys,
+or structs with stable JSON tags.
 
 ## Checks
 

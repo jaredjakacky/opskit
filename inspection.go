@@ -9,6 +9,11 @@ import "context"
 // strings, or unredacted user data. Presentation layers such as Servekit may
 // pass inspection data through directly, so components are responsible for
 // redacting inspection data before returning it.
+//
+// Summary and Details must be JSON-marshalable values. Prefer strings,
+// numbers, booleans, nil, slices, maps with string keys, or structs with
+// stable JSON tags. Do not return functions, channels, cyclic values,
+// non-finite floats, or values that require unavailable custom encoders.
 type Inspection struct {
 	Summary    any         `json:"summary,omitempty"`
 	Details    any         `json:"details,omitempty"`

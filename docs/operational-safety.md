@@ -101,6 +101,11 @@ opskit.Inspection{
 Presentation layers may pass inspection through directly. Redact before
 returning.
 
+`Summary` and `Details` must also be JSON-marshalable. Prefer strings, numbers,
+booleans, null values, slices, maps with string keys, or structs with stable JSON
+tags. Do not return functions, channels, cyclic values, non-finite floats, or
+values that require unavailable custom encoders.
+
 If `Inspect` returns an error while building a component snapshot, Opskit copies
 that error text into `inspection_error`. Return only safe, redacted inspection
 errors.
