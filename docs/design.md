@@ -471,11 +471,14 @@ That lets admin surfaces still show identity, status, readiness, and capability
 metadata even when detailed inspection is broken.
 
 Registry read models also recover panics from component `Status`, `Readiness`,
-and `Inspect` methods and convert them into generic unknown or not-ready
-operational data. The recovered panic value is never exposed.
+`Inspect`, `Checks`, and `Commands` methods and convert them into generic
+unknown or not-ready operational data or sentinel errors. The recovered panic
+value is never exposed.
 
 Direct calls to `Registry.Inspect(ctx, name)` remain strict and return the
 inspector error. If inspection panics, `Inspect` returns `ErrComponentPanicked`.
+Direct calls to `Registry.Checks(ctx, name)` and `Registry.Commands(ctx, name)`
+also return `ErrComponentPanicked` when descriptor reads panic.
 
 ## Checks Are Active
 

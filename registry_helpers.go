@@ -193,6 +193,28 @@ func safeComponentInspection(inspector Inspector, ctx context.Context) (inspecti
 	return inspection, err, false
 }
 
+func safeComponentChecks(describer CheckDescriber, ctx context.Context) (checks []CheckDescriptor, err error, panicked bool) {
+	defer func() {
+		if recover() != nil {
+			err = ErrComponentPanicked
+			panicked = true
+		}
+	}()
+
+	return describer.Checks(ctx), nil, false
+}
+
+func safeComponentCommands(describer CommandDescriber, ctx context.Context) (commands []CommandDescriptor, err error, panicked bool) {
+	defer func() {
+		if recover() != nil {
+			err = ErrComponentPanicked
+			panicked = true
+		}
+	}()
+
+	return describer.Commands(ctx), nil, false
+}
+
 func normalizeReadinessItemState(ready bool, state State) State {
 	if state != "" {
 		return state
