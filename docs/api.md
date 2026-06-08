@@ -319,6 +319,11 @@ func (r *Registry) Snapshot(context.Context, name string) (ComponentSnapshot, er
 It does not synthesize a single aggregate state. Use `Readiness` when the caller
 needs an admission decision.
 
+Registry read models recover panics from component `Status`, `Readiness`, and
+`Inspect` methods. Recovered panics are represented with generic unknown or
+not-ready operational data. Panic values are not exposed because they may contain
+unsafe details.
+
 The status read model is:
 
 ```go
@@ -369,6 +374,9 @@ If inspection fails while building a snapshot, the snapshot still includes
 status, registration, capabilities, and readiness; `inspection_error` contains
 the inspection failure and `inspection` is omitted.
 
+If inspection panics while building a snapshot, `inspection_error` contains a
+generic panic message and the panic value is not exposed.
+
 `Registry` methods normalize nil contexts to `context.Background()`. Methods
 that evaluate components synchronously respect canceled contexts. For request
 paths, probes, and admin endpoints, pass bounded contexts.
@@ -384,6 +392,7 @@ var (
 	ErrInvalidComponentName
 	ErrDuplicateComponent
 	ErrComponentNotFound
+	ErrComponentPanicked
 	ErrInspectionUnsupported
 	ErrCheckerUnsupported
 	ErrCheckDescriberUnsupported

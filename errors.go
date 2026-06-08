@@ -8,6 +8,7 @@ var (
 	ErrInvalidComponentName        = errors.New("opskit: component name is invalid")
 	ErrDuplicateComponent          = errors.New("opskit: component already registered")
 	ErrComponentNotFound           = errors.New("opskit: component not found")
+	ErrComponentPanicked           = errors.New("opskit: component operation panicked")
 	ErrInspectionUnsupported       = errors.New("opskit: component does not support inspection")
 	ErrCheckerUnsupported          = errors.New("opskit: component does not support checks")
 	ErrCheckDescriberUnsupported   = errors.New("opskit: component does not describe checks")

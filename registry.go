@@ -153,7 +153,8 @@ func (r *Registry) Components() []Component {
 // Status calls each component's Status method synchronously. Use a context with
 // an appropriate deadline when serving request paths. If evaluation is
 // canceled, Status returns a synthetic opskit.registry entry that describes the
-// cancellation.
+// cancellation. If a component status method panics, Status recovers and
+// returns an unknown status for that component without exposing the panic value.
 func (r *Registry) Status(ctx context.Context) SystemStatus {
 	ctx = normalizeContext(ctx)
 
@@ -170,7 +171,7 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 		}
 
 		component := reg.component
-		status := component.Status(ctx)
+		status, _ := safeComponentStatus(component, ctx)
 
 		system.Components = append(system.Components, ComponentStatus{
 			Component: reg.info,
@@ -194,7 +195,9 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 // Readiness calls readiness contributors and component status methods
 // synchronously. Use a context with an appropriate deadline for probe paths. If
 // evaluation is canceled, Readiness includes a synthetic opskit.registry item
-// that describes the cancellation.
+// that describes the cancellation. If a component readiness or status method
+// panics, Readiness recovers and returns an unknown not-ready item without
+// exposing the panic value.
 func (r *Registry) Readiness(ctx context.Context) Readiness {
 	ctx = normalizeContext(ctx)
 
@@ -222,8 +225,7 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 		component := reg.component
 
 		if contributor, ok := component.(ReadinessContributor); ok {
-			componentReadiness := contributor.Readiness(ctx)
-			componentReadiness = readinessWithPolicy(reg.info, componentReadiness, reg.readinessPolicy)
+			componentReadiness, _ := safeComponentReadiness(contributor, ctx, reg.info, reg.readinessPolicy)
 
 			if blocksReadiness(reg.readinessPolicy) {
 				required++
@@ -237,8 +239,11 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 			continue
 		}
 
-		status := component.Status(ctx)
+		status, panicked := safeComponentStatus(component, ctx)
 		componentReadiness := readinessFromStatusWithPolicy(reg.info, status, reg.readinessPolicy)
+		if panicked {
+			componentReadiness = panickedReadiness(reg.info, reg.readinessPolicy, componentStatusPanicMessage)
+		}
 
 		if blocksReadiness(reg.readinessPolicy) {
 			required++
@@ -270,7 +275,9 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 //
 // Snapshot calls component status, readiness, and inspection methods
 // synchronously when those capabilities are available. Use a context with an
-// appropriate deadline when serving admin request paths.
+// appropriate deadline when serving admin request paths. If a component method
+// panics, Snapshot recovers and returns partial safe operational data without
+// exposing the panic value.
 func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot, error) {
 	ctx = normalizeContext(ctx)
 
@@ -284,6 +291,7 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 	}
 
 	component := reg.component
+	status, statusPanicked := safeComponentStatus(component, ctx)
 
 	snapshot := ComponentSnapshot{
 		Component: reg.info,
@@ -291,7 +299,7 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 			ReadinessPolicy: reg.readinessPolicy,
 		},
 		Capabilities: capabilitiesOf(component),
-		Status:       component.Status(ctx),
+		Status:       status,
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -300,8 +308,10 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 
 	if participatesInReadiness(reg.readinessPolicy) {
 		if contributor, ok := component.(ReadinessContributor); ok {
-			readiness := contributor.Readiness(ctx)
-			readiness = readinessWithPolicy(reg.info, readiness, reg.readinessPolicy)
+			readiness, _ := safeComponentReadiness(contributor, ctx, reg.info, reg.readinessPolicy)
+			snapshot.Readiness = &readiness
+		} else if statusPanicked {
+			readiness := panickedReadiness(reg.info, reg.readinessPolicy, componentStatusPanicMessage)
 			snapshot.Readiness = &readiness
 		} else {
 			readiness := readinessFromStatusWithPolicy(reg.info, snapshot.Status, reg.readinessPolicy)
@@ -314,7 +324,11 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 	}
 
 	if inspector, ok := component.(Inspector); ok {
-		inspection, err := inspector.Inspect(ctx)
+		inspection, err, panicked := safeComponentInspection(inspector, ctx)
+		if panicked {
+			snapshot.InspectionError = componentInspectionPanicMessage
+			return snapshot, nil
+		}
 		if err != nil {
 			snapshot.InspectionError = err.Error()
 			return snapshot, nil
@@ -328,7 +342,9 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 // Inspect returns safe operational inspection data for one registered component.
 //
 // Inspect calls the component inspector synchronously. Use a context with an
-// appropriate deadline when serving admin request paths.
+// appropriate deadline when serving admin request paths. If the inspector
+// panics, Inspect recovers and returns ErrComponentPanicked without exposing the
+// panic value.
 func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error) {
 	ctx = normalizeContext(ctx)
 
@@ -346,7 +362,8 @@ func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error)
 		return Inspection{}, ErrInspectionUnsupported
 	}
 
-	return inspector.Inspect(ctx)
+	inspection, err, _ := safeComponentInspection(inspector, ctx)
+	return inspection, err
 }
 
 // Checker returns a registered component as a Checker.

@@ -479,8 +479,12 @@ Snapshot inspection failures are represented as data, not fatal snapshot errors.
 That lets admin surfaces still show identity, status, readiness, and capability
 metadata even when detailed inspection is broken.
 
+Registry read models also recover panics from component `Status`, `Readiness`,
+and `Inspect` methods and convert them into generic unknown or not-ready
+operational data. The recovered panic value is never exposed.
+
 Direct calls to `Registry.Inspect(ctx, name)` remain strict and return the
-inspector error.
+inspector error. If inspection panics, `Inspect` returns `ErrComponentPanicked`.
 
 ## Checks Are Active
 

@@ -1,6 +1,15 @@
 package opskit
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
+
+const (
+	componentStatusPanicMessage     = "component status evaluation panicked"
+	componentReadinessPanicMessage  = "component readiness evaluation panicked"
+	componentInspectionPanicMessage = "component inspection evaluation panicked"
+)
 
 func (r *Registry) registration(name string) (registration, bool) {
 	r.mu.RLock()
@@ -131,6 +140,57 @@ func readinessWithPolicy(info ComponentInfo, readiness Readiness, policy Readine
 
 func readinessFromStatusWithPolicy(info ComponentInfo, status Status, policy ReadinessPolicy) Readiness {
 	return readinessWithPolicy(info, ReadinessFromStatus(info, status), policy)
+}
+
+func panickedReadiness(info ComponentInfo, policy ReadinessPolicy, reason string) Readiness {
+	return Readiness{
+		Ready:  false,
+		Reason: reason,
+		Components: []ReadinessItem{
+			{
+				Name:   info.Name,
+				Kind:   info.Kind,
+				Policy: policy,
+				Ready:  false,
+				State:  StateUnknown,
+				Reason: reason,
+			},
+		},
+	}
+}
+
+func safeComponentStatus(component Component, ctx context.Context) (status Status, panicked bool) {
+	defer func() {
+		if recover() != nil {
+			status = UnknownStatus(componentStatusPanicMessage)
+			panicked = true
+		}
+	}()
+
+	return component.Status(ctx), false
+}
+
+func safeComponentReadiness(contributor ReadinessContributor, ctx context.Context, info ComponentInfo, policy ReadinessPolicy) (readiness Readiness, panicked bool) {
+	defer func() {
+		if recover() != nil {
+			readiness = panickedReadiness(info, policy, componentReadinessPanicMessage)
+			panicked = true
+		}
+	}()
+
+	return readinessWithPolicy(info, contributor.Readiness(ctx), policy), false
+}
+
+func safeComponentInspection(inspector Inspector, ctx context.Context) (inspection Inspection, err error, panicked bool) {
+	defer func() {
+		if recover() != nil {
+			err = ErrComponentPanicked
+			panicked = true
+		}
+	}()
+
+	inspection, err = inspector.Inspect(ctx)
+	return inspection, err, false
 }
 
 func normalizeReadinessItemState(ready bool, state State) State {
