@@ -3,7 +3,7 @@
 Opskit is the shared operational contract layer for Go services.
 
 It gives service components one common language for identity, status, readiness,
-inspection, checks, commands, events, and safe operational metadata.
+inspection, checks, commands, and safe operational metadata.
 
 Opskit is deliberately small. It does not run the service. It does not present
 HTTP routes. It does not start goroutines. It does not execute checks or
@@ -24,7 +24,6 @@ Production Go services tend to rebuild the same operational shell:
 - outbound client health
 - admin inspection
 - operational commands
-- diagnostic events
 - safe metadata for logs, tests, and support tooling
 
 Each concern can be implemented cleanly on its own. The problem appears at the
@@ -55,7 +54,6 @@ this is whether I am ready
 this is safe diagnostic detail
 this is how I can be checked
 this is what commands I support
-this is the event shape I emit
 ```
 
 Everything else decides what to do with that information.
@@ -92,8 +90,6 @@ Opskit owns the shared operational vocabulary:
 - active check result shapes
 - grouped check result shapes
 - command request and result shapes
-- backend-neutral events
-- observer contracts
 - safe attributes
 - registry read models
 - capability discovery
@@ -204,10 +200,6 @@ type CommandHandler interface {
 type CommandDescriber interface {
 	Commands(context.Context) []CommandDescriptor
 }
-
-type Observer interface {
-	Observe(context.Context, Event)
-}
 ```
 
 These optional interfaces let components participate in richer operational
@@ -274,11 +266,6 @@ classDiagram
     +Commands(ctx) []CommandDescriptor
   }
 
-  class Observer {
-    <<interface>>
-    +Observe(ctx, event)
-  }
-
   Registry --> Component : stores
   Component <|.. ReadinessContributor : optional
   Component <|.. Inspector : optional
@@ -287,7 +274,6 @@ classDiagram
   Component <|.. CheckGroup : optional
   Component <|.. CommandHandler : optional
   Component <|.. CommandDescriber : optional
-  Observer --> Event : receives
 ```
 
 ## Status Is Descriptive
@@ -564,21 +550,10 @@ or audit their execution.
 Those responsibilities belong to the caller, usually an execution layer or a
 protected presentation layer.
 
-## Events Are Backend-Neutral
+## Telemetry Stays Outside Opskit
 
-Opskit defines a small event envelope and observer interface.
-
-Events can be mapped to:
-
-- `slog`
-- OpenTelemetry
-- test collectors
-- audit sinks
-- custom logging systems
-- no-op observers
-
-The root package does not import OpenTelemetry and does not configure telemetry
-backends.
+The root package does not import OpenTelemetry, define a logging backend,
+configure telemetry backends, or own audit sinks.
 
 Telemetry belongs where work happens:
 
@@ -588,8 +563,9 @@ Telemetry belongs where work happens:
 - outbound request telemetry belongs in the client package
 - dependency-check telemetry belongs in the dependency package
 
-Opskit gives those systems a common event shape. It does not become the
-telemetry system.
+Opskit values may be used by those systems, but Opskit does not become the
+telemetry system or freeze a shared event envelope before a producing kit needs
+one.
 
 ## Standalone Use
 
@@ -724,7 +700,6 @@ admin routes     -> Registry.Status and Registry.Snapshot
 tests            -> Registry.Readiness and Registry.Inspect
 worker runtime   -> Registry.Checker and Registry.CheckGroup
 command executor -> Registry.CommandHandler
-telemetry bridge -> Event and Observer
 ```
 
 The application still owns the business. Opskit owns the vocabulary.

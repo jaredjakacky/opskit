@@ -160,27 +160,6 @@ Any presentation layer that accepts user-supplied command payloads must handle:
 
 Command handlers should return only safe `CommandResult.Result` values.
 
-## Events
-
-Events may be mapped to logs, telemetry, tests, or custom collectors. Treat
-`Event.Message`, `Event.Error`, and `Event.Attributes` as public operational
-fields.
-
-Good event data is compact and low-cardinality:
-
-```go
-opskit.Event{
-	Operation: "cache/refresh",
-	Outcome:   "completed",
-	Message:   "cache refresh completed",
-	Attributes: []opskit.Attribute{
-		opskit.Attr("component", "cache"),
-	},
-}
-```
-
-Avoid putting raw payloads, tokens, user identifiers, or stack dumps in events.
-
 ## HTTP Exposure
 
 > **Planned integration: Servekit admin exposure**

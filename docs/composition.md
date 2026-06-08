@@ -16,7 +16,6 @@ Opskit owns shared passive contracts:
 - inspection
 - checks and check groups
 - commands
-- events and observers
 - registry read models
 
 Opskit does not own runtime behavior:

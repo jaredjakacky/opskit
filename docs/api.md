@@ -6,9 +6,9 @@ accurate in editors, `go doc`, and pkg.go.dev. This file explains how the pieces
 fit together and what each part is for.
 
 Opskit is intentionally small. It gives services one shared operational contract
-for component identity, status, readiness, inspection, checks, commands, and
-events. It does not run those operations. Callers, applications, and higher-level
-kits decide when to expose, execute, authorize, schedule, or observe them.
+for component identity, status, readiness, inspection, checks, and commands. It
+does not run those operations. Callers, applications, and higher-level kits
+decide when to expose, execute, authorize, or schedule them.
 
 ## Design Boundaries
 
@@ -23,8 +23,8 @@ or informational without forcing every consumer to infer admission policy from a
 single status field.
 
 Third, every value returned by Opskit contracts is safe for operational surfaces.
-Statuses, attributes, inspections, check errors, command results, and events may
-flow into logs, admin endpoints, dashboards, support tooling, or test output.
+Statuses, attributes, inspections, check errors, and command results may flow
+into logs, admin endpoints, dashboards, support tooling, or test output.
 Components must redact secrets before returning data.
 
 ## Core Vocabulary
@@ -694,42 +694,6 @@ Defaults:
 
 `Accepted` means the command was admitted, not necessarily completed. Command
 results are operational output and must contain only safe values.
-
-## Events and Observers
-
-Events are small backend-neutral operational records:
-
-```go
-type Event struct {
-	Time       time.Time     `json:"time"`
-	Component  ComponentInfo `json:"component"`
-	Operation  string        `json:"operation"`
-	Outcome    string        `json:"outcome,omitempty"`
-	Message    string        `json:"message,omitempty"`
-	Error      string        `json:"error,omitempty"`
-	Duration   Duration      `json:"duration,omitempty"`
-	Attributes []Attribute   `json:"attributes,omitempty"`
-}
-```
-
-Consumers can map events to `slog`, OpenTelemetry, tests, audit sinks, or custom
-collectors without forcing Opskit to own a backend.
-The root package intentionally has no OpenTelemetry dependency. HTTP telemetry,
-worker/check telemetry, config lifecycle telemetry, client telemetry, and
-dependency-check telemetry should live in the kits that perform that work.
-
-```go
-type Observer interface {
-	Observe(context.Context, Event)
-}
-
-type ObserverFunc func(context.Context, Event)
-type NopObserver struct{}
-```
-
-`ObserverFunc` adapts a function. A nil `ObserverFunc` and `NopObserver` both do
-nothing. Nil contexts are normalized for `ObserverFunc`; `NopObserver` ignores
-the context entirely.
 
 ## Common Patterns
 

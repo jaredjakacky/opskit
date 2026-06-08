@@ -5,11 +5,10 @@
 // dependency checks, persistence, telemetry backends, or application policy.
 //
 // Other kits implement Opskit contracts so they can be registered, inspected,
-// checked, controlled, observed, and exposed consistently by service bootstrap
-// code.
+// checked, controlled, and exposed consistently by service bootstrap code.
 //
 // Opskit may define passive data shapes, small interfaces, and a passive
 // component registry. It must not execute checks, dispatch commands, schedule
-// work, authorize operations, buffer events, export telemetry, own lifecycle, or
-// decide application policy.
+// work, authorize operations, export telemetry, own lifecycle, or decide
+// application policy.
 package opskit
