@@ -699,6 +699,65 @@ func TestRegistryRegisterValidatesComponentNames(t *testing.T) {
 	}
 }
 
+func TestRegistryReadModelsUseRegisteredComponentInfo(t *testing.T) {
+	ctx := context.Background()
+	component := &countingComponent{
+		info: ComponentInfo{
+			Name:        "component",
+			Kind:        "test",
+			Description: "registered description",
+		},
+		status: ReadyStatus("ready"),
+	}
+
+	registry := NewRegistry()
+	if err := registry.Register(component, Optional()); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	component.info = ComponentInfo{
+		Name:        "mutated component",
+		Kind:        "mutated",
+		Description: "mutated description",
+	}
+
+	status := registry.Status(ctx)
+	if len(status.Components) != 1 {
+		t.Fatalf("Status.Components length = %d, want 1", len(status.Components))
+	}
+	if got := status.Components[0].Component; got != (ComponentInfo{Name: "component", Kind: "test", Description: "registered description"}) {
+		t.Fatalf("Status.Component = %+v, want registered component info", got)
+	}
+
+	readiness := registry.Readiness(ctx)
+	if len(readiness.Components) != 1 {
+		t.Fatalf("Readiness.Components length = %d, want 1", len(readiness.Components))
+	}
+	if got := readiness.Components[0].Name; got != "component" {
+		t.Fatalf("Readiness.Components[0].Name = %q, want component", got)
+	}
+	if got := readiness.Components[0].Kind; got != "test" {
+		t.Fatalf("Readiness.Components[0].Kind = %q, want test", got)
+	}
+
+	snapshot, err := registry.Snapshot(ctx, "component")
+	if err != nil {
+		t.Fatalf("Snapshot error = %v", err)
+	}
+	if got := snapshot.Component; got != (ComponentInfo{Name: "component", Kind: "test", Description: "registered description"}) {
+		t.Fatalf("Snapshot.Component = %+v, want registered component info", got)
+	}
+	if snapshot.Readiness == nil {
+		t.Fatal("Snapshot.Readiness is nil, want readiness")
+	}
+	if got := snapshot.Readiness.Components[0].Name; got != "component" {
+		t.Fatalf("Snapshot.Readiness.Components[0].Name = %q, want component", got)
+	}
+	if got := snapshot.Readiness.Components[0].Kind; got != "test" {
+		t.Fatalf("Snapshot.Readiness.Components[0].Kind = %q, want test", got)
+	}
+}
+
 type testComponent struct {
 	info   ComponentInfo
 	status Status

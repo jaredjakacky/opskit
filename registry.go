@@ -25,6 +25,7 @@ type Registry struct {
 
 type registration struct {
 	component       Component
+	info            ComponentInfo
 	readinessPolicy ReadinessPolicy
 }
 
@@ -90,6 +91,7 @@ func (r *Registry) Register(component Component, opts ...RegisterOption) error {
 
 	reg := registration{
 		component:       component,
+		info:            info,
 		readinessPolicy: ReadinessRequired,
 	}
 
@@ -168,11 +170,10 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 		}
 
 		component := reg.component
-		info := component.ComponentInfo()
 		status := component.Status(ctx)
 
 		system.Components = append(system.Components, ComponentStatus{
-			Component: info,
+			Component: reg.info,
 			Registration: ComponentRegistration{
 				ReadinessPolicy: reg.readinessPolicy,
 			},
@@ -219,11 +220,10 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 		}
 
 		component := reg.component
-		info := component.ComponentInfo()
 
 		if contributor, ok := component.(ReadinessContributor); ok {
 			componentReadiness := contributor.Readiness(ctx)
-			componentReadiness = readinessWithPolicy(info, componentReadiness, reg.readinessPolicy)
+			componentReadiness = readinessWithPolicy(reg.info, componentReadiness, reg.readinessPolicy)
 
 			if blocksReadiness(reg.readinessPolicy) {
 				required++
@@ -238,7 +238,7 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 		}
 
 		status := component.Status(ctx)
-		componentReadiness := readinessFromStatusWithPolicy(info, status, reg.readinessPolicy)
+		componentReadiness := readinessFromStatusWithPolicy(reg.info, status, reg.readinessPolicy)
 
 		if blocksReadiness(reg.readinessPolicy) {
 			required++
@@ -284,10 +284,9 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 	}
 
 	component := reg.component
-	info := component.ComponentInfo()
 
 	snapshot := ComponentSnapshot{
-		Component: info,
+		Component: reg.info,
 		Registration: ComponentRegistration{
 			ReadinessPolicy: reg.readinessPolicy,
 		},
@@ -302,10 +301,10 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 	if participatesInReadiness(reg.readinessPolicy) {
 		if contributor, ok := component.(ReadinessContributor); ok {
 			readiness := contributor.Readiness(ctx)
-			readiness = readinessWithPolicy(info, readiness, reg.readinessPolicy)
+			readiness = readinessWithPolicy(reg.info, readiness, reg.readinessPolicy)
 			snapshot.Readiness = &readiness
 		} else {
-			readiness := readinessFromStatusWithPolicy(info, snapshot.Status, reg.readinessPolicy)
+			readiness := readinessFromStatusWithPolicy(reg.info, snapshot.Status, reg.readinessPolicy)
 			snapshot.Readiness = &readiness
 		}
 
