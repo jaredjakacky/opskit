@@ -364,6 +364,42 @@ func (r *Registry) Checker(name string) (Checker, error) {
 	return checker, nil
 }
 
+// CheckDescriber returns a registered component as a CheckDescriber.
+func (r *Registry) CheckDescriber(name string) (CheckDescriber, error) {
+	component, ok := r.Component(name)
+	if !ok {
+		return nil, ErrComponentNotFound
+	}
+
+	describer, ok := component.(CheckDescriber)
+	if !ok {
+		return nil, ErrCheckDescriberUnsupported
+	}
+
+	return describer, nil
+}
+
+// Checks returns passive check metadata for one registered component.
+func (r *Registry) Checks(ctx context.Context, name string) ([]CheckDescriptor, error) {
+	ctx = normalizeContext(ctx)
+
+	component, ok := r.Component(name)
+	if !ok {
+		return nil, ErrComponentNotFound
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	describer, ok := component.(CheckDescriber)
+	if !ok {
+		return nil, ErrCheckDescriberUnsupported
+	}
+
+	return cloneCheckDescriptors(describer.Checks(ctx)), nil
+}
+
 // CheckGroup returns a registered component as a CheckGroup.
 func (r *Registry) CheckGroup(name string) (CheckGroup, error) {
 	component, ok := r.Component(name)

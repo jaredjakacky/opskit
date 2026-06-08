@@ -174,10 +174,19 @@ Redact before returning it.
 ## Checks
 
 Checks are active operational work. The registry can discover a component that
-implements `Checker` or `CheckGroup`, but it does not schedule or execute
-checks. The caller decides whether and when to invoke the returned capability.
+implements `Checker`, `CheckGroup`, or passive `CheckDescriber` metadata, but
+it does not schedule or execute checks. The caller decides whether and when to
+invoke the returned capability.
 
 ```go
+checks, err := ops.Checks(ctx, "dependencies")
+if err != nil {
+	return err
+}
+for _, check := range checks {
+	fmt.Println(check.Name)
+}
+
 checker, err := ops.Checker("dependencies")
 if err != nil {
 	return err

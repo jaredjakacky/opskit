@@ -62,6 +62,7 @@ type ComponentCapabilities struct {
 	ReadinessContributor bool `json:"readiness_contributor,omitempty"`
 	Inspector            bool `json:"inspector,omitempty"`
 	Checker              bool `json:"checker,omitempty"`
+	CheckDescriber       bool `json:"check_describer,omitempty"`
 	CheckGroup           bool `json:"check_group,omitempty"`
 	CommandHandler       bool `json:"command_handler,omitempty"`
 	CommandDescriber     bool `json:"command_describer,omitempty"`

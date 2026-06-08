@@ -17,9 +17,10 @@ out of readiness entirely.
 [`examples/inspection`](../examples/inspection) adds the `Inspector` capability
 for safe diagnostic data.
 
-[`examples/checks`](../examples/checks) shows the active check contracts. Opskit
-can discover `Checker` and `CheckGroup` implementations, but it does not run
-them on an interval or decide retry policy.
+[`examples/checks`](../examples/checks) shows passive check metadata and the
+active check contracts. Opskit can discover `CheckDescriber`, `Checker`, and
+`CheckGroup` implementations, but it does not run them on an interval or decide
+retry policy.
 
 [`examples/commands`](../examples/commands) shows command request and result
 shapes. Opskit can discover a `CommandHandler`, but authentication,

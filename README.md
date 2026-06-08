@@ -325,10 +325,17 @@ type Checker interface {
 	Check(context.Context) CheckResult
 }
 
+type CheckDescriber interface {
+	Checks(context.Context) []CheckDescriptor
+}
+
 type CheckGroup interface {
 	CheckAll(context.Context) CheckSummary
 }
 ```
+
+`CheckDescriber` lets admin surfaces, CLIs, worker runtimes, and docs
+generators list supported checks without running them.
 
 Opskit only defines the contracts and result shapes. It does not run checks on an interval, retry them, cache them, or decide when they should affect readiness.
 
