@@ -141,12 +141,12 @@ flowchart LR
   Registry --> CLI[CLI Tools]
   Registry --> Tests[Tests]
   Registry --> Exec[Execution Layer]
-  Registry --> Events[Logging / Telemetry Adapters]
+  Registry --> Telemetry[Logging / Telemetry Adapters]
 
   Readiness -. presentation policy .-> Readiness
   Admin -. auth, routing, encoding .-> Admin
   Exec -. scheduling, retries, timeouts .-> Exec
-  Events -. backend export .-> Events
+  Telemetry -. backend export .-> Telemetry
 ```
 
 The registry is a passive read model. It stores components, evaluates their
