@@ -92,10 +92,6 @@ func TestFunctionAdaptersNormalizeNilContext(t *testing.T) {
 			return ReadyStatus("ready")
 		},
 	}.Status(ctx)
-
-	ObserverFunc(func(ctx context.Context, event Event) {
-		requireContext(t, ctx)
-	}).Observe(ctx, Event{})
 }
 
 type contextCheckingComponent struct {

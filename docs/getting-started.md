@@ -146,7 +146,7 @@ application-owned code for those responsibilities.
 - Read [Usage Guide](usage.md) for registry usage, readiness policy, inspection,
   checks, and commands.
 - Read [Operational Safety](operational-safety.md) before exposing inspection,
-  check errors, command payloads, or events.
+  check errors, or command payloads.
 - Read [Composition Guide](composition.md) for how Opskit is intended to fit
   with Servekit, Workerkit, and the rest of the Kit Series.
 - Read [API Map](api.md) for the complete exported surface.

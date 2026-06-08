@@ -9,7 +9,7 @@
 
 Opskit is a small Go package for giving service components one shared operational language.
 
-It defines the contracts and data shapes that production services keep rebuilding around status, readiness, inspection, checks, commands, events, and safe operational metadata. Components expose what they know. A registry collects them. Presentation and execution layers decide what to do with that state.
+It defines the contracts and data shapes that production services keep rebuilding around status, readiness, inspection, checks, commands, and safe operational metadata. Components expose what they know. A registry collects them. Presentation and execution layers decide what to do with that state.
 
 Opskit is especially useful for services that want a coherent operations surface without turning the application into a framework.
 
@@ -67,7 +67,7 @@ Opskit pulls the common language into one small package. A component can say:
 - whether it supports active checks
 - whether it supports grouped checks
 - whether it supports operational commands
-- what safe attributes or events it emits
+- what safe attributes it emits
 
 The application still owns policy. Opskit only gives the policy a stable shape.
 
@@ -111,7 +111,7 @@ Common standalone uses include:
 - giving tests one readiness model instead of ad hoc booleans
 - exposing safe admin snapshots through an existing admin surface
 - standardizing component identity, status, readiness, inspection, checks,
-  commands, events, and attributes without adopting the rest of the Kit Series
+  commands, and attributes without adopting the rest of the Kit Series
 
 Opskit still stays passive in standalone usage. It does not serve HTTP,
 schedule checks, dispatch commands, authorize callers, export telemetry, retry
@@ -256,7 +256,7 @@ That one registry already gives you:
 - required, optional, and informational readiness policy
 - capability discovery
 - safe inspection hooks
-- passive check, check group, command, event, and observer contracts
+- passive check, check group, and command contracts
 - one read model for HTTP, workers, tests, CLIs, logs, and diagnostics
 
 In practice, you get a shared operations surface without building a new adapter contract for every package combination.
@@ -361,12 +361,6 @@ generators list supported commands without invoking them.
 Command payloads are opaque JSON. The handler owns decoding and validation.
 
 Opskit does not dispatch commands. It does not authorize callers, apply concurrency limits, retry commands, or expose HTTP routes. Those responsibilities belong to execution and presentation layers such as Workerkit and Servekit.
-
-### Events and observers
-
-`Event` is a small backend-neutral event shape. `Observer` is the matching receiver contract.
-
-Opskit does not buffer events, export telemetry, create spans, record metrics, or own logging. Kits and applications can map events to `slog`, OpenTelemetry, tests, custom collectors, or nothing. Opskit is telemetry-backend-neutral; sibling kits and optional adapters may map Opskit events to OpenTelemetry where the actual work happens.
 
 ### Registry
 
@@ -477,7 +471,6 @@ Opskit has a small core path, but it is not limited to status and readiness. Adv
 - safe inspection data
 - passive checker and check group contracts
 - passive command handler contracts
-- backend-neutral event and observer contracts
 - JSON-friendly duration values
 - registry-level required, optional, and informational readiness policy
 - named component snapshots for admin presentation
