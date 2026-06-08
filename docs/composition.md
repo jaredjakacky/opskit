@@ -148,6 +148,10 @@ Register components where the service is assembled.
 Keep component names stable. Operational consumers may put names in paths, logs,
 alerts, dashboards, and tests.
 
+Keep component kinds and attribute keys stable and low-cardinality. Opskit does
+not validate them because each presentation or telemetry layer may have its own
+field, label, or route constraints.
+
 Use required readiness sparingly but deliberately. If a component blocks serving
 traffic, make it required. If it is useful but non-critical, make it optional. If
 it should never influence readiness, make it informational.

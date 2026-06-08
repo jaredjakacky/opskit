@@ -7,7 +7,9 @@ import "context"
 // Name must be stable and unique within a Registry. Names must be safe single
 // path segments containing only ASCII letters, ASCII digits, dots, underscores,
 // and hyphens. Kind should be a low-cardinality category such as "config",
-// "worker_runtime", "clients", "dependencies", or "state".
+// "worker_runtime", "clients", "dependencies", or "state". Kind is not
+// validated by Opskit; prefer stable, safe tokens because presentation and
+// telemetry layers may use it in filters, labels, dashboards, or routes.
 type ComponentInfo struct {
 	Name        string `json:"name"`
 	Kind        string `json:"kind,omitempty"`

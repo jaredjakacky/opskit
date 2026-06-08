@@ -67,6 +67,11 @@ region, target name, backend type, mode, or policy. Do not use them for tokens,
 credentials, raw connection strings, personally identifying data, or unredacted
 error payloads.
 
+Opskit does not validate attribute keys. Prefer stable safe-token keys using
+ASCII letters, ASCII digits, dots, underscores, and hyphens. Presentation and
+telemetry layers may apply stricter rules before turning attributes into log
+fields, metrics labels, filters, or routes.
+
 ### `Duration`
 
 `Duration` wraps `time.Duration` with JSON that humans can read:
@@ -118,7 +123,10 @@ slashes, `.` and `..`, colons, and other path-hostile characters are rejected at
 registration time.
 
 `Kind` should be low-cardinality, such as `config`, `worker_runtime`,
-`dependencies`, `clients`, `state`, or `build`. `Description` is optional human
+`dependencies`, `clients`, `state`, or `build`. Opskit does not validate
+`Kind`; prefer stable safe tokens using ASCII letters, ASCII digits, dots,
+underscores, and hyphens because presentation and telemetry layers may use
+kinds in filters, labels, dashboards, or routes. `Description` is optional human
 context for admin surfaces.
 
 ### `ComponentFunc`
