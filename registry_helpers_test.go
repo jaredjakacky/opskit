@@ -33,8 +33,8 @@ func TestRegistryHelperRegistrationAndSnapshot(t *testing.T) {
 	if !ok {
 		t.Fatal("registration(second) ok = false, want true")
 	}
-	if reg.component.ComponentInfo().Name != "second" {
-		t.Fatalf("registration(second).component name = %q, want second", reg.component.ComponentInfo().Name)
+	if reg.info.Name != "second" {
+		t.Fatalf("registration(second).info.Name = %q, want second", reg.info.Name)
 	}
 	if reg.readinessPolicy != ReadinessOptional {
 		t.Fatalf("registration(second).readinessPolicy = %q, want %q", reg.readinessPolicy, ReadinessOptional)
@@ -44,17 +44,17 @@ func TestRegistryHelperRegistrationAndSnapshot(t *testing.T) {
 	if len(registrations) != 2 {
 		t.Fatalf("snapshot length = %d, want 2", len(registrations))
 	}
-	if got := registrations[0].component.ComponentInfo().Name; got != "first" {
-		t.Fatalf("snapshot[0] name = %q, want first", got)
+	if got := registrations[0].info.Name; got != "first" {
+		t.Fatalf("snapshot[0].info.Name = %q, want first", got)
 	}
-	if got := registrations[1].component.ComponentInfo().Name; got != "second" {
-		t.Fatalf("snapshot[1] name = %q, want second", got)
+	if got := registrations[1].info.Name; got != "second" {
+		t.Fatalf("snapshot[1].info.Name = %q, want second", got)
 	}
 
 	registrations[0] = registrations[1]
 	registrations = registry.snapshot()
-	if got := registrations[0].component.ComponentInfo().Name; got != "first" {
-		t.Fatalf("snapshot returned mutable registry slice, first name = %q", got)
+	if got := registrations[0].info.Name; got != "first" {
+		t.Fatalf("snapshot returned mutable registry slice, first info name = %q", got)
 	}
 }
 
