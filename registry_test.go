@@ -3,6 +3,7 @@ package opskit
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -123,6 +124,47 @@ func TestRegistryStatusCanceledContext(t *testing.T) {
 	}
 }
 
+func TestRegistryStatusRecoversComponentPanic(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	panicking := &panicComponent{
+		info:        ComponentInfo{Name: "panicking", Kind: "test"},
+		statusPanic: "secret status panic",
+	}
+	ready := testComponent{
+		info:   ComponentInfo{Name: "ready", Kind: "test"},
+		status: ReadyStatus("ready"),
+	}
+
+	if err := registry.Register(panicking); err != nil {
+		t.Fatalf("Register(panicking) error = %v", err)
+	}
+	if err := registry.Register(ready); err != nil {
+		t.Fatalf("Register(ready) error = %v", err)
+	}
+
+	status := registry.Status(ctx)
+	if len(status.Components) != 2 {
+		t.Fatalf("Status.Components length = %d, want 2", len(status.Components))
+	}
+	if got := status.Components[0].Status.State; got != StateUnknown {
+		t.Fatalf("panicking status state = %q, want %q", got, StateUnknown)
+	}
+	if status.Components[0].Status.Ready {
+		t.Fatal("panicking status ready = true, want false")
+	}
+	if got := status.Components[0].Status.Message; got != componentStatusPanicMessage {
+		t.Fatalf("panicking status message = %q, want %q", got, componentStatusPanicMessage)
+	}
+	if strings.Contains(status.Components[0].Status.Message, "secret") {
+		t.Fatalf("panic value exposed in status message %q", status.Components[0].Status.Message)
+	}
+	if got := status.Components[1].Status.State; got != StateReady {
+		t.Fatalf("ready status state = %q, want %q", got, StateReady)
+	}
+}
+
 func TestRegistryReadinessCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -151,6 +193,91 @@ func TestRegistryReadinessCanceledContext(t *testing.T) {
 	}
 	if got := readiness.Components[0].Name; got != "opskit.registry" {
 		t.Fatalf("Readiness.Components[0].Name = %q, want opskit.registry", got)
+	}
+}
+
+func TestRegistryReadinessRecoversComponentPanic(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	required := &panicComponent{
+		info:           ComponentInfo{Name: "required", Kind: "test"},
+		status:         ReadyStatus("ready"),
+		readinessPanic: "secret readiness panic",
+	}
+	optional := &panicStatusOnlyComponent{
+		info:  ComponentInfo{Name: "optional", Kind: "test"},
+		panic: "secret status panic",
+	}
+
+	if err := registry.Register(required); err != nil {
+		t.Fatalf("Register(required) error = %v", err)
+	}
+	if err := registry.Register(optional, Optional()); err != nil {
+		t.Fatalf("Register(optional) error = %v", err)
+	}
+
+	readiness := registry.Readiness(ctx)
+	if readiness.Ready {
+		t.Fatal("Readiness.Ready = true, want false")
+	}
+	if readiness.Reason != "one or more readiness components are not ready" {
+		t.Fatalf("Readiness.Reason = %q, want one or more readiness components are not ready", readiness.Reason)
+	}
+	if len(readiness.Components) != 2 {
+		t.Fatalf("Readiness.Components length = %d, want 2", len(readiness.Components))
+	}
+	if got := readiness.Components[0].State; got != StateUnknown {
+		t.Fatalf("required readiness state = %q, want %q", got, StateUnknown)
+	}
+	if got := readiness.Components[0].Reason; got != componentReadinessPanicMessage {
+		t.Fatalf("required readiness reason = %q, want %q", got, componentReadinessPanicMessage)
+	}
+	if got := readiness.Components[1].State; got != StateUnknown {
+		t.Fatalf("optional readiness state = %q, want %q", got, StateUnknown)
+	}
+	if got := readiness.Components[1].Reason; got != componentStatusPanicMessage {
+		t.Fatalf("optional readiness reason = %q, want %q", got, componentStatusPanicMessage)
+	}
+	for _, item := range readiness.Components {
+		if strings.Contains(item.Reason, "secret") || strings.Contains(item.Message, "secret") {
+			t.Fatalf("panic value exposed in readiness item %+v", item)
+		}
+	}
+}
+
+func TestRegistryReadinessOptionalPanicDoesNotBlockRequiredReadiness(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	required := testComponent{
+		info:   ComponentInfo{Name: "required", Kind: "test"},
+		status: ReadyStatus("ready"),
+	}
+	optional := &panicStatusOnlyComponent{
+		info:  ComponentInfo{Name: "optional", Kind: "test"},
+		panic: "secret optional panic",
+	}
+
+	if err := registry.Register(required); err != nil {
+		t.Fatalf("Register(required) error = %v", err)
+	}
+	if err := registry.Register(optional, Optional()); err != nil {
+		t.Fatalf("Register(optional) error = %v", err)
+	}
+
+	readiness := registry.Readiness(ctx)
+	if !readiness.Ready {
+		t.Fatal("Readiness.Ready = false, want true")
+	}
+	if len(readiness.Components) != 2 {
+		t.Fatalf("Readiness.Components length = %d, want 2", len(readiness.Components))
+	}
+	if readiness.Components[1].Policy != ReadinessOptional {
+		t.Fatalf("optional policy = %q, want %q", readiness.Components[1].Policy, ReadinessOptional)
+	}
+	if readiness.Components[1].Ready {
+		t.Fatal("optional readiness item ready = true, want false")
 	}
 }
 
@@ -425,6 +552,112 @@ func TestRegistrySnapshotIncludesInspectionError(t *testing.T) {
 	}
 }
 
+func TestRegistrySnapshotRecoversStatusPanic(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	component := &panicStatusOnlyComponent{
+		info:  ComponentInfo{Name: "component", Kind: "test"},
+		panic: "secret status panic",
+	}
+
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	snapshot, err := registry.Snapshot(ctx, "component")
+	if err != nil {
+		t.Fatalf("Snapshot error = %v", err)
+	}
+	if snapshot.Status.State != StateUnknown {
+		t.Fatalf("Snapshot.Status.State = %q, want %q", snapshot.Status.State, StateUnknown)
+	}
+	if snapshot.Status.Message != componentStatusPanicMessage {
+		t.Fatalf("Snapshot.Status.Message = %q, want %q", snapshot.Status.Message, componentStatusPanicMessage)
+	}
+	if snapshot.Readiness == nil {
+		t.Fatal("Snapshot.Readiness is nil, want readiness")
+	}
+	if snapshot.Readiness.Components[0].State != StateUnknown {
+		t.Fatalf("Snapshot.Readiness.Components[0].State = %q, want %q", snapshot.Readiness.Components[0].State, StateUnknown)
+	}
+	if snapshot.Readiness.Components[0].Reason != componentStatusPanicMessage {
+		t.Fatalf("Snapshot.Readiness.Components[0].Reason = %q, want %q", snapshot.Readiness.Components[0].Reason, componentStatusPanicMessage)
+	}
+	if strings.Contains(snapshot.Status.Message, "secret") ||
+		strings.Contains(snapshot.Readiness.Components[0].Reason, "secret") {
+		t.Fatalf("panic value exposed in snapshot %+v", snapshot)
+	}
+}
+
+func TestRegistrySnapshotRecoversReadinessPanic(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	component := &panicComponent{
+		info:           ComponentInfo{Name: "component", Kind: "test"},
+		status:         ReadyStatus("ready"),
+		readinessPanic: "secret readiness panic",
+	}
+
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	snapshot, err := registry.Snapshot(ctx, "component")
+	if err != nil {
+		t.Fatalf("Snapshot error = %v", err)
+	}
+	if snapshot.Status.State != StateReady {
+		t.Fatalf("Snapshot.Status.State = %q, want %q", snapshot.Status.State, StateReady)
+	}
+	if snapshot.Readiness == nil {
+		t.Fatal("Snapshot.Readiness is nil, want readiness")
+	}
+	if snapshot.Readiness.Ready {
+		t.Fatal("Snapshot.Readiness.Ready = true, want false")
+	}
+	if snapshot.Readiness.Components[0].State != StateUnknown {
+		t.Fatalf("Snapshot.Readiness.Components[0].State = %q, want %q", snapshot.Readiness.Components[0].State, StateUnknown)
+	}
+	if snapshot.Readiness.Components[0].Reason != componentReadinessPanicMessage {
+		t.Fatalf("Snapshot.Readiness.Components[0].Reason = %q, want %q", snapshot.Readiness.Components[0].Reason, componentReadinessPanicMessage)
+	}
+	if strings.Contains(snapshot.Readiness.Components[0].Reason, "secret") {
+		t.Fatalf("panic value exposed in snapshot readiness %+v", snapshot.Readiness.Components[0])
+	}
+}
+
+func TestRegistrySnapshotRecoversInspectPanic(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	component := &panicComponent{
+		info:         ComponentInfo{Name: "component", Kind: "test"},
+		status:       ReadyStatus("ready"),
+		readiness:    ReadyReadiness("ready"),
+		inspectPanic: "secret inspection panic",
+	}
+
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	snapshot, err := registry.Snapshot(ctx, "component")
+	if err != nil {
+		t.Fatalf("Snapshot error = %v", err)
+	}
+	if snapshot.Inspection != nil {
+		t.Fatalf("Snapshot.Inspection = %+v, want nil", snapshot.Inspection)
+	}
+	if snapshot.InspectionError != componentInspectionPanicMessage {
+		t.Fatalf("Snapshot.InspectionError = %q, want %q", snapshot.InspectionError, componentInspectionPanicMessage)
+	}
+	if strings.Contains(snapshot.InspectionError, "secret") {
+		t.Fatalf("panic value exposed in inspection error %q", snapshot.InspectionError)
+	}
+}
+
 func TestRegistrySnapshotIncludesInformationalInspection(t *testing.T) {
 	ctx := context.Background()
 	registry := NewRegistry()
@@ -566,6 +799,29 @@ func TestRegistryInspectReturnsInspectorError(t *testing.T) {
 
 	if _, err := registry.Inspect(ctx, "component"); err != want {
 		t.Fatalf("Inspect error = %v, want %v", err, want)
+	}
+}
+
+func TestRegistryInspectRecoversPanic(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	component := &panicComponent{
+		info:         ComponentInfo{Name: "component", Kind: "test"},
+		status:       ReadyStatus("ready"),
+		inspectPanic: "secret inspection panic",
+	}
+
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	_, err := registry.Inspect(ctx, "component")
+	if !errors.Is(err, ErrComponentPanicked) {
+		t.Fatalf("Inspect error = %v, want %v", err, ErrComponentPanicked)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("panic value exposed in inspect error %q", err.Error())
 	}
 }
 
@@ -994,4 +1250,52 @@ func (c *testOperationalComponent) Commands(context.Context) []CommandDescriptor
 			},
 		},
 	}
+}
+
+type panicStatusOnlyComponent struct {
+	info  ComponentInfo
+	panic string
+}
+
+func (c *panicStatusOnlyComponent) ComponentInfo() ComponentInfo {
+	return c.info
+}
+
+func (c *panicStatusOnlyComponent) Status(context.Context) Status {
+	panic(c.panic)
+}
+
+type panicComponent struct {
+	info           ComponentInfo
+	status         Status
+	readiness      Readiness
+	inspection     Inspection
+	statusPanic    string
+	readinessPanic string
+	inspectPanic   string
+}
+
+func (c *panicComponent) ComponentInfo() ComponentInfo {
+	return c.info
+}
+
+func (c *panicComponent) Status(context.Context) Status {
+	if c.statusPanic != "" {
+		panic(c.statusPanic)
+	}
+	return c.status
+}
+
+func (c *panicComponent) Readiness(context.Context) Readiness {
+	if c.readinessPanic != "" {
+		panic(c.readinessPanic)
+	}
+	return c.readiness
+}
+
+func (c *panicComponent) Inspect(context.Context) (Inspection, error) {
+	if c.inspectPanic != "" {
+		panic(c.inspectPanic)
+	}
+	return c.inspection, nil
 }
