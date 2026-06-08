@@ -27,12 +27,19 @@ type CommandRequest struct {
 // execution layers. They do not validate, authorize, route, schedule, or
 // execute commands.
 type CommandDescriptor struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	PayloadKind string      `json:"payload_kind,omitempty"`
-	Dangerous   bool        `json:"dangerous,omitempty"`
-	Idempotent  bool        `json:"idempotent,omitempty"`
-	Attributes  []Attribute `json:"attributes,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	// PayloadKind is a human- and tool-readable payload category. It is not a
+	// schema, validator, or authorization rule.
+	PayloadKind string `json:"payload_kind,omitempty"`
+	// Dangerous is an advisory hint for presentation and execution layers.
+	// Opskit does not enforce safety policy from this value.
+	Dangerous bool `json:"dangerous,omitempty"`
+	// Idempotent is an advisory hint for presentation and execution layers.
+	// Opskit does not enforce retry, scheduling, or execution policy from this
+	// value.
+	Idempotent bool        `json:"idempotent,omitempty"`
+	Attributes []Attribute `json:"attributes,omitempty"`
 }
 
 // CommandResult describes the outcome of an operational command invocation.
