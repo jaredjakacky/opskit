@@ -474,6 +474,7 @@ These are contracts, not runtime behavior. Execution policy belongs outside Opsk
 
 - [Getting Started](docs/getting-started.md): first registry, first component, first readiness result
 - [Usage Guide](docs/usage.md): components, status, readiness policy, inspection, and registry usage
+- [Design Guide](docs/design.md): package boundaries, public type relationships, and registry flows
 - [Composition Guide](docs/composition.md): how Opskit fits with Servekit, Workerkit, Configkit, Dependkit, Clientkit, and Statekit
 - [Operational Safety](docs/operational-safety.md): safe attributes, inspection redaction, command payloads, and admin exposure
 - [API Map](docs/api.md): human-friendly map of the exported surface
