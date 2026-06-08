@@ -393,3 +393,39 @@ func (r *Registry) CommandHandler(name string) (CommandHandler, error) {
 
 	return handler, nil
 }
+
+// CommandDescriber returns a registered component as a CommandDescriber.
+func (r *Registry) CommandDescriber(name string) (CommandDescriber, error) {
+	component, ok := r.Component(name)
+	if !ok {
+		return nil, ErrComponentNotFound
+	}
+
+	describer, ok := component.(CommandDescriber)
+	if !ok {
+		return nil, ErrCommandDescriberUnsupported
+	}
+
+	return describer, nil
+}
+
+// Commands returns passive command metadata for one registered component.
+func (r *Registry) Commands(ctx context.Context, name string) ([]CommandDescriptor, error) {
+	ctx = normalizeContext(ctx)
+
+	component, ok := r.Component(name)
+	if !ok {
+		return nil, ErrComponentNotFound
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	describer, ok := component.(CommandDescriber)
+	if !ok {
+		return nil, ErrCommandDescriberUnsupported
+	}
+
+	return cloneCommandDescriptors(describer.Commands(ctx)), nil
+}

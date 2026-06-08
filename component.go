@@ -64,6 +64,7 @@ type ComponentCapabilities struct {
 	Checker              bool `json:"checker,omitempty"`
 	CheckGroup           bool `json:"check_group,omitempty"`
 	CommandHandler       bool `json:"command_handler,omitempty"`
+	CommandDescriber     bool `json:"command_describer,omitempty"`
 }
 
 // ComponentSnapshot is the combined operational view of one registered

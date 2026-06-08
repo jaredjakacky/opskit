@@ -366,7 +366,8 @@ func TestRegistrySnapshotIncludesCapabilitiesReadinessAndInspection(t *testing.T
 		!snapshot.Capabilities.Inspector ||
 		!snapshot.Capabilities.Checker ||
 		!snapshot.Capabilities.CheckGroup ||
-		!snapshot.Capabilities.CommandHandler {
+		!snapshot.Capabilities.CommandHandler ||
+		!snapshot.Capabilities.CommandDescriber {
 		t.Fatalf("Snapshot.Capabilities = %+v, want all optional capabilities", snapshot.Capabilities)
 	}
 	if snapshot.Status.State != StateReady {
@@ -575,6 +576,16 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 		status:     ReadyStatus("ready"),
 		readiness:  ReadyReadiness("ready"),
 		inspection: Inspection{Summary: "ok"},
+		commands: []CommandDescriptor{
+			{
+				Name:        "test/run",
+				Description: "run test command",
+				Idempotent:  true,
+				Attributes: []Attribute{
+					Attr("scope", "test"),
+				},
+			},
+		},
 	}
 	plain := testComponent{
 		info:   ComponentInfo{Name: "plain", Kind: "test"},
@@ -597,6 +608,28 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	if _, err := registry.CommandHandler("operational"); err != nil {
 		t.Fatalf("CommandHandler(operational) error = %v", err)
 	}
+	if _, err := registry.CommandDescriber("operational"); err != nil {
+		t.Fatalf("CommandDescriber(operational) error = %v", err)
+	}
+	commands, err := registry.Commands(context.Background(), "operational")
+	if err != nil {
+		t.Fatalf("Commands(operational) error = %v", err)
+	}
+	if len(commands) != 1 || commands[0].Name != "test/run" {
+		t.Fatalf("Commands(operational) = %+v, want test/run command", commands)
+	}
+	commands[0].Name = "mutated"
+	commands[0].Attributes[0] = Attr("mutated", "true")
+	commands, err = registry.Commands(context.Background(), "operational")
+	if err != nil {
+		t.Fatalf("Commands(operational) second call error = %v", err)
+	}
+	if commands[0].Name != "test/run" {
+		t.Fatalf("Commands returned mutable command descriptors, name = %q", commands[0].Name)
+	}
+	if commands[0].Attributes[0] != Attr("scope", "test") {
+		t.Fatalf("Commands returned mutable command attributes, attributes = %+v", commands[0].Attributes)
+	}
 
 	if _, err := registry.Checker("plain"); err != ErrCheckerUnsupported {
 		t.Fatalf("Checker(plain) error = %v, want %v", err, ErrCheckerUnsupported)
@@ -607,6 +640,12 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	if _, err := registry.CommandHandler("plain"); err != ErrCommandHandlerUnsupported {
 		t.Fatalf("CommandHandler(plain) error = %v, want %v", err, ErrCommandHandlerUnsupported)
 	}
+	if _, err := registry.CommandDescriber("plain"); err != ErrCommandDescriberUnsupported {
+		t.Fatalf("CommandDescriber(plain) error = %v, want %v", err, ErrCommandDescriberUnsupported)
+	}
+	if _, err := registry.Commands(context.Background(), "plain"); err != ErrCommandDescriberUnsupported {
+		t.Fatalf("Commands(plain) error = %v, want %v", err, ErrCommandDescriberUnsupported)
+	}
 
 	if _, err := registry.Checker("missing"); err != ErrComponentNotFound {
 		t.Fatalf("Checker(missing) error = %v, want %v", err, ErrComponentNotFound)
@@ -616,6 +655,18 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	}
 	if _, err := registry.CommandHandler("missing"); err != ErrComponentNotFound {
 		t.Fatalf("CommandHandler(missing) error = %v, want %v", err, ErrComponentNotFound)
+	}
+	if _, err := registry.CommandDescriber("missing"); err != ErrComponentNotFound {
+		t.Fatalf("CommandDescriber(missing) error = %v, want %v", err, ErrComponentNotFound)
+	}
+	if _, err := registry.Commands(context.Background(), "missing"); err != ErrComponentNotFound {
+		t.Fatalf("Commands(missing) error = %v, want %v", err, ErrComponentNotFound)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := registry.Commands(canceled, "operational"); err != context.Canceled {
+		t.Fatalf("Commands(canceled) error = %v, want %v", err, context.Canceled)
 	}
 }
 
@@ -828,6 +879,7 @@ type testOperationalComponent struct {
 	status     Status
 	readiness  Readiness
 	inspection Inspection
+	commands   []CommandDescriptor
 }
 
 func (c *testOperationalComponent) ComponentInfo() ComponentInfo {
@@ -859,4 +911,21 @@ func (c *testOperationalComponent) CheckAll(context.Context) CheckSummary {
 
 func (c *testOperationalComponent) HandleCommand(context.Context, CommandRequest) CommandResult {
 	return CompletedCommand("completed", nil, 0)
+}
+
+func (c *testOperationalComponent) Commands(context.Context) []CommandDescriptor {
+	if c.commands != nil {
+		return c.commands
+	}
+
+	return []CommandDescriptor{
+		{
+			Name:        "test/run",
+			Description: "run test command",
+			Idempotent:  true,
+			Attributes: []Attribute{
+				Attr("scope", "test"),
+			},
+		},
+	}
 }

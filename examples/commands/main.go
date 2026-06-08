@@ -23,6 +23,20 @@ func (cacheAdmin) Status(context.Context) opskit.Status {
 	return opskit.ReadyStatus("cache command handler ready")
 }
 
+func (cacheAdmin) Commands(context.Context) []opskit.CommandDescriptor {
+	return []opskit.CommandDescriptor{
+		{
+			Name:        "cache/refresh",
+			Description: "refresh cache entries",
+			PayloadKind: "cache_refresh",
+			Idempotent:  true,
+			Attributes: []opskit.Attribute{
+				opskit.Attr("scope", "cache"),
+			},
+		},
+	}
+}
+
 func (cacheAdmin) HandleCommand(_ context.Context, request opskit.CommandRequest) opskit.CommandResult {
 	if request.Name != "cache/refresh" {
 		return opskit.RejectedCommand("unsupported command")

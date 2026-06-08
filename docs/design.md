@@ -197,6 +197,10 @@ type CommandHandler interface {
 	HandleCommand(context.Context, CommandRequest) CommandResult
 }
 
+type CommandDescriber interface {
+	Commands(context.Context) []CommandDescriptor
+}
+
 type Observer interface {
 	Observe(context.Context, Event)
 }
@@ -219,6 +223,8 @@ classDiagram
     +Checker(name) (Checker, error)
     +CheckGroup(name) (CheckGroup, error)
     +CommandHandler(name) (CommandHandler, error)
+    +CommandDescriber(name) (CommandDescriber, error)
+    +Commands(ctx, name) ([]CommandDescriptor, error)
   }
 
   class Component {
@@ -252,6 +258,11 @@ classDiagram
     +HandleCommand(ctx, request) CommandResult
   }
 
+  class CommandDescriber {
+    <<interface>>
+    +Commands(ctx) []CommandDescriptor
+  }
+
   class Observer {
     <<interface>>
     +Observe(ctx, event)
@@ -263,6 +274,7 @@ classDiagram
   Component <|.. Checker : optional
   Component <|.. CheckGroup : optional
   Component <|.. CommandHandler : optional
+  Component <|.. CommandDescriber : optional
   Observer --> Event : receives
 ```
 
@@ -506,7 +518,15 @@ Opskit defines the request and result shape:
 type CommandHandler interface {
 	HandleCommand(context.Context, CommandRequest) CommandResult
 }
+
+type CommandDescriber interface {
+	Commands(context.Context) []CommandDescriptor
+}
 ```
+
+`CommandDescriber` is passive command metadata. It lets presentation layers,
+CLIs, worker runtimes, and docs generators discover supported command names and
+operator-facing hints without invoking the command.
 
 Opskit does not dispatch commands. It does not authorize callers. It does not
 validate user input. It does not enforce concurrency. It does not retry commands

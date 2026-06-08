@@ -20,6 +20,7 @@ func TestErrorSentinels(t *testing.T) {
 		{name: "checker unsupported", err: ErrCheckerUnsupported, want: "opskit: component does not support checks"},
 		{name: "check group unsupported", err: ErrCheckGroupUnsupported, want: "opskit: component does not support grouped checks"},
 		{name: "command handler unsupported", err: ErrCommandHandlerUnsupported, want: "opskit: component does not support commands"},
+		{name: "command describer unsupported", err: ErrCommandDescriberUnsupported, want: "opskit: component does not describe commands"},
 	}
 
 	for _, tt := range tests {
@@ -48,6 +49,7 @@ func TestErrorSentinelsAreDistinct(t *testing.T) {
 		ErrCheckerUnsupported,
 		ErrCheckGroupUnsupported,
 		ErrCommandHandlerUnsupported,
+		ErrCommandDescriberUnsupported,
 	}
 
 	for i, left := range errs {

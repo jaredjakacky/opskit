@@ -202,11 +202,19 @@ Use `SummarizeChecks` to keep aggregate check results consistent.
 ## Commands
 
 Commands are active control-plane operations. The registry can discover
-`CommandHandler`, but it does not authorize, validate, dispatch, retry, execute,
-or schedule commands. The caller decides whether and when to invoke the returned
-handler.
+`CommandHandler` and passive `CommandDescriber` metadata, but it does not
+authorize, validate, dispatch, retry, execute, or schedule commands. The caller
+decides whether and when to invoke the returned handler.
 
 ```go
+commands, err := ops.Commands(ctx, "cache-admin")
+if err != nil {
+	return err
+}
+for _, command := range commands {
+	fmt.Println(command.Name)
+}
+
 handler, err := ops.CommandHandler("cache-admin")
 if err != nil {
 	return err
