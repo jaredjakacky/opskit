@@ -1034,7 +1034,12 @@ func TestRegistryRegisterValidatesComponentNames(t *testing.T) {
 		{name: "..", want: ErrInvalidComponentName},
 		{name: "worker:one", want: ErrInvalidComponentName},
 		{name: "worker@one", want: ErrInvalidComponentName},
+		{name: "worker\none", want: ErrInvalidComponentName},
+		{name: "worker\tone", want: ErrInvalidComponentName},
+		{name: "worker\x00one", want: ErrInvalidComponentName},
+		{name: "\u2003worker", want: ErrInvalidComponentName},
 		{name: "worker_1.2-alpha", want: nil},
+		{name: "cache.primary_1-alpha", want: nil},
 		{name: "WorkerA", want: nil},
 	}
 
