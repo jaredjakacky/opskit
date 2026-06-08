@@ -25,7 +25,7 @@ Do not return:
 Return:
 
 - stable component names
-- low-cardinality kinds
+- stable low-cardinality kinds
 - redacted messages
 - safe attributes
 - summarized state
@@ -44,6 +44,11 @@ opskit.Attr("backend", "redis")
 
 Good attributes help operators filter and understand state without exposing
 private data.
+
+Attribute keys should be stable, low-cardinality safe tokens. Prefer ASCII
+letters, ASCII digits, dots, underscores, and hyphens. Opskit does not validate
+attribute keys because presentation, telemetry, and routing layers may have
+different field-name or label-name rules.
 
 Avoid attributes like:
 

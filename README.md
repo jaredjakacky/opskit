@@ -276,7 +276,7 @@ type Component interface {
 }
 ```
 
-`ComponentInfo` gives the component a stable operational identity. Names must be unique within a registry and safe for use in path-oriented operations surfaces.
+`ComponentInfo` gives the component a stable operational identity. Names must be unique within a registry and safe for use in path-oriented operations surfaces. Kinds and attribute keys should be stable, low-cardinality safe tokens, but Opskit leaves stricter validation to presentation and telemetry layers.
 
 `Status` reports the current component state. It should normally be a fast cached or local snapshot. Expensive work such as dependency pings, reloads, active checks, command dispatch, remote calls, or state transitions belongs in explicit check, command, worker, or application execution paths.
 
