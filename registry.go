@@ -414,7 +414,12 @@ func (r *Registry) Checks(ctx context.Context, name string) ([]CheckDescriptor, 
 		return nil, ErrCheckDescriberUnsupported
 	}
 
-	return cloneCheckDescriptors(describer.Checks(ctx)), nil
+	checks, err, _ := safeComponentChecks(describer, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return cloneCheckDescriptors(checks), nil
 }
 
 // CheckGroup returns a registered component as a CheckGroup.
@@ -480,5 +485,10 @@ func (r *Registry) Commands(ctx context.Context, name string) ([]CommandDescript
 		return nil, ErrCommandDescriberUnsupported
 	}
 
-	return cloneCommandDescriptors(describer.Commands(ctx)), nil
+	commands, err, _ := safeComponentCommands(describer, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return cloneCommandDescriptors(commands), nil
 }

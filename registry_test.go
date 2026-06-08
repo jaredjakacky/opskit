@@ -825,6 +825,56 @@ func TestRegistryInspectRecoversPanic(t *testing.T) {
 	}
 }
 
+func TestRegistryChecksRecoversPanic(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	component := &panicDescriptorComponent{
+		info:        ComponentInfo{Name: "component", Kind: "test"},
+		checksPanic: "secret checks panic",
+	}
+
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	checks, err := registry.Checks(ctx, "component")
+	if !errors.Is(err, ErrComponentPanicked) {
+		t.Fatalf("Checks error = %v, want %v", err, ErrComponentPanicked)
+	}
+	if checks != nil {
+		t.Fatalf("Checks = %+v, want nil", checks)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("panic value exposed in checks error %q", err.Error())
+	}
+}
+
+func TestRegistryCommandsRecoversPanic(t *testing.T) {
+	ctx := context.Background()
+	registry := NewRegistry()
+
+	component := &panicDescriptorComponent{
+		info:          ComponentInfo{Name: "component", Kind: "test"},
+		commandsPanic: "secret commands panic",
+	}
+
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	commands, err := registry.Commands(ctx, "component")
+	if !errors.Is(err, ErrComponentPanicked) {
+		t.Fatalf("Commands error = %v, want %v", err, ErrComponentPanicked)
+	}
+	if commands != nil {
+		t.Fatalf("Commands = %+v, want nil", commands)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("panic value exposed in commands error %q", err.Error())
+	}
+}
+
 func TestRegistryCapabilityAccessors(t *testing.T) {
 	registry := NewRegistry()
 
@@ -1303,4 +1353,32 @@ func (c *panicComponent) Inspect(context.Context) (Inspection, error) {
 		panic(c.inspectPanic)
 	}
 	return c.inspection, nil
+}
+
+type panicDescriptorComponent struct {
+	info          ComponentInfo
+	checksPanic   string
+	commandsPanic string
+}
+
+func (c *panicDescriptorComponent) ComponentInfo() ComponentInfo {
+	return c.info
+}
+
+func (c *panicDescriptorComponent) Status(context.Context) Status {
+	return ReadyStatus("ready")
+}
+
+func (c *panicDescriptorComponent) Checks(context.Context) []CheckDescriptor {
+	if c.checksPanic != "" {
+		panic(c.checksPanic)
+	}
+	return []CheckDescriptor{{Name: "check"}}
+}
+
+func (c *panicDescriptorComponent) Commands(context.Context) []CommandDescriptor {
+	if c.commandsPanic != "" {
+		panic(c.commandsPanic)
+	}
+	return []CommandDescriptor{{Name: "command"}}
 }

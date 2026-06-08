@@ -115,9 +115,9 @@ If `Inspect` returns an error while building a component snapshot, Opskit copies
 that error text into `inspection_error`. Return only safe, redacted inspection
 errors.
 
-If a component `Status`, `Readiness`, or `Inspect` method panics during a
-registry read model, Opskit recovers and emits only a generic panic message. It
-does not expose the recovered panic value.
+If a component `Status`, `Readiness`, `Inspect`, `Checks`, or `Commands` method
+panics during a registry read model, Opskit recovers and emits only a generic
+panic message or sentinel error. It does not expose the recovered panic value.
 
 ## Check Errors
 

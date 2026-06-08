@@ -327,10 +327,11 @@ func (r *Registry) Snapshot(context.Context, name string) (ComponentSnapshot, er
 It does not synthesize a single aggregate state. Use `Readiness` when the caller
 needs an admission decision.
 
-Registry read models recover panics from component `Status`, `Readiness`, and
-`Inspect` methods. Recovered panics are represented with generic unknown or
-not-ready operational data. Panic values are not exposed because they may contain
-unsafe details.
+Registry read models recover panics from component `Status`, `Readiness`,
+`Inspect`, `Checks`, and `Commands` methods. Recovered panics are represented
+with generic unknown or not-ready operational data, or with `ErrComponentPanicked`
+for strict single-component metadata reads. Panic values are not exposed because
+they may contain unsafe details.
 
 The status read model is:
 
@@ -511,6 +512,9 @@ runtimes, and docs generators list supported checks without running them. The
 descriptors are advisory; callers still own scheduling, execution, retry,
 caching, timeout, concurrency, and readiness policy.
 
+If `Registry.Checks` recovers a `CheckDescriber` panic, it returns
+`ErrComponentPanicked` without exposing the panic value.
+
 ### `CheckDescriptor`
 
 ```go
@@ -623,6 +627,9 @@ panicking. Nil contexts are normalized.
 runtimes, and docs generators list supported commands without invoking them.
 The descriptors are advisory; callers still own authorization, validation,
 routing, scheduling, concurrency, and execution.
+
+If `Registry.Commands` recovers a `CommandDescriber` panic, it returns
+`ErrComponentPanicked` without exposing the panic value.
 
 ### `CommandDescriptor`
 
