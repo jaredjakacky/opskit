@@ -342,7 +342,14 @@ A package such as Workerkit can execute checks under lifecycle, timeout, retry, 
 type CommandHandler interface {
 	HandleCommand(context.Context, CommandRequest) CommandResult
 }
+
+type CommandDescriber interface {
+	Commands(context.Context) []CommandDescriptor
+}
 ```
+
+`CommandDescriber` lets admin surfaces, CLIs, worker runtimes, and docs
+generators list supported commands without invoking them.
 
 Command payloads are opaque JSON. The handler owns decoding and validation.
 

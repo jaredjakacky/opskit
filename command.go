@@ -21,6 +21,20 @@ type CommandRequest struct {
 	Attributes  []Attribute     `json:"attributes,omitempty"`
 }
 
+// CommandDescriptor describes one supported operational command.
+//
+// Descriptors are passive metadata for presentation, documentation, and
+// execution layers. They do not validate, authorize, route, schedule, or
+// execute commands.
+type CommandDescriptor struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description,omitempty"`
+	PayloadKind string      `json:"payload_kind,omitempty"`
+	Dangerous   bool        `json:"dangerous,omitempty"`
+	Idempotent  bool        `json:"idempotent,omitempty"`
+	Attributes  []Attribute `json:"attributes,omitempty"`
+}
+
 // CommandResult describes the outcome of an operational command invocation.
 type CommandResult struct {
 	State State `json:"state"`
@@ -44,6 +58,24 @@ type CommandResult struct {
 // CommandHandler handles an operational command.
 type CommandHandler interface {
 	HandleCommand(context.Context, CommandRequest) CommandResult
+}
+
+// CommandDescriber reports the operational commands a component supports.
+type CommandDescriber interface {
+	Commands(context.Context) []CommandDescriptor
+}
+
+func cloneCommandDescriptors(commands []CommandDescriptor) []CommandDescriptor {
+	if len(commands) == 0 {
+		return nil
+	}
+
+	cloned := make([]CommandDescriptor, len(commands))
+	for i, command := range commands {
+		command.Attributes = cloneAttributes(command.Attributes)
+		cloned[i] = command
+	}
+	return cloned
 }
 
 // CommandHandlerFunc adapts a function into a CommandHandler.

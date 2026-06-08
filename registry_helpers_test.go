@@ -117,7 +117,8 @@ func TestCapabilitiesOf(t *testing.T) {
 		!full.Inspector ||
 		!full.Checker ||
 		!full.CheckGroup ||
-		!full.CommandHandler {
+		!full.CommandHandler ||
+		!full.CommandDescriber {
 		t.Fatalf("capabilitiesOf(full) = %+v, want all optional capabilities", full)
 	}
 }

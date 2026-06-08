@@ -388,6 +388,7 @@ var (
 	ErrCheckerUnsupported
 	ErrCheckGroupUnsupported
 	ErrCommandHandlerUnsupported
+	ErrCommandDescriberUnsupported
 )
 ```
 
@@ -406,6 +407,7 @@ type ComponentCapabilities struct {
 	Checker              bool `json:"checker,omitempty"`
 	CheckGroup           bool `json:"check_group,omitempty"`
 	CommandHandler       bool `json:"command_handler,omitempty"`
+	CommandDescriber     bool `json:"command_describer,omitempty"`
 }
 ```
 
@@ -417,6 +419,8 @@ func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error)
 func (r *Registry) Checker(name string) (Checker, error)
 func (r *Registry) CheckGroup(name string) (CheckGroup, error)
 func (r *Registry) CommandHandler(name string) (CommandHandler, error)
+func (r *Registry) CommandDescriber(name string) (CommandDescriber, error)
+func (r *Registry) Commands(ctx context.Context, name string) ([]CommandDescriptor, error)
 ```
 
 These accessors discover capability support. The accessors themselves do not
@@ -555,11 +559,39 @@ type CommandHandler interface {
 	HandleCommand(context.Context, CommandRequest) CommandResult
 }
 
+type CommandDescriber interface {
+	Commands(context.Context) []CommandDescriptor
+}
+
 type CommandHandlerFunc func(context.Context, CommandRequest) CommandResult
 ```
 
 Nil `CommandHandlerFunc` values return an unknown, rejected result instead of
 panicking. Nil contexts are normalized.
+
+`CommandDescriber` is passive metadata. It helps admin surfaces, CLIs, worker
+runtimes, and docs generators list supported commands without invoking them.
+The descriptors are advisory; callers still own authorization, validation,
+routing, scheduling, concurrency, and execution.
+
+### `CommandDescriptor`
+
+```go
+type CommandDescriptor struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description,omitempty"`
+	PayloadKind string      `json:"payload_kind,omitempty"`
+	Dangerous   bool        `json:"dangerous,omitempty"`
+	Idempotent  bool        `json:"idempotent,omitempty"`
+	Attributes  []Attribute `json:"attributes,omitempty"`
+}
+```
+
+`PayloadKind` is a human- and tool-readable payload category, not a schema.
+`Dangerous` and `Idempotent` are advisory hints for presentation and execution
+layers. Because false values are omitted from JSON, false means "not marked,"
+not an Opskit safety or execution guarantee. Opskit does not enforce either
+flag.
 
 ### `CommandRequest`
 

@@ -59,6 +59,63 @@ func TestCommandRequestPayloadRawMessageRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCommandDescriptorJSON(t *testing.T) {
+	descriptor := CommandDescriptor{
+		Name:        "cache/refresh",
+		Description: "refresh cache entries",
+		PayloadKind: "cache_refresh",
+		Dangerous:   true,
+		Idempotent:  true,
+		Attributes: []Attribute{
+			Attr("scope", "cache"),
+		},
+	}
+
+	data, err := json.Marshal(descriptor)
+	if err != nil {
+		t.Fatalf("Marshal CommandDescriptor error = %v", err)
+	}
+
+	want := `{"name":"cache/refresh","description":"refresh cache entries","payload_kind":"cache_refresh","dangerous":true,"idempotent":true,"attributes":[{"key":"scope","value":"cache"}]}`
+	if string(data) != want {
+		t.Fatalf("Marshal CommandDescriptor = %s, want %s", data, want)
+	}
+}
+
+func TestCommandDescriptorJSONOmitEmptyFields(t *testing.T) {
+	data, err := json.Marshal(CommandDescriptor{Name: "cache/refresh"})
+	if err != nil {
+		t.Fatalf("Marshal CommandDescriptor error = %v", err)
+	}
+
+	want := `{"name":"cache/refresh"}`
+	if string(data) != want {
+		t.Fatalf("Marshal CommandDescriptor = %s, want %s", data, want)
+	}
+}
+
+func TestCloneCommandDescriptors(t *testing.T) {
+	input := []CommandDescriptor{
+		{
+			Name: "cache/refresh",
+			Attributes: []Attribute{
+				Attr("scope", "cache"),
+			},
+		},
+	}
+
+	cloned := cloneCommandDescriptors(input)
+	input[0].Name = "mutated"
+	input[0].Attributes[0] = Attr("scope", "mutated")
+
+	if cloned[0].Name != "cache/refresh" {
+		t.Fatalf("cloned[0].Name = %q, want cache/refresh", cloned[0].Name)
+	}
+	if cloned[0].Attributes[0] != Attr("scope", "cache") {
+		t.Fatalf("cloned[0].Attributes = %+v, want scope cache", cloned[0].Attributes)
+	}
+}
+
 func TestCommandHandlerFunc(t *testing.T) {
 	ctx := context.Background()
 	request := CommandRequest{
