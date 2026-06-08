@@ -68,6 +68,23 @@ func TestComponentCapabilitiesJSONIncludesSupportedCapabilities(t *testing.T) {
 	requireJSON(t, capabilities, `{"readiness_contributor":true,"inspector":true,"checker":true,"check_describer":true,"check_group":true,"command_handler":true,"command_describer":true}`)
 }
 
+func TestComponentEntryJSON(t *testing.T) {
+	entry := ComponentEntry{
+		Component: ComponentInfo{
+			Name: "cache",
+			Kind: "dependency",
+		},
+		Registration: ComponentRegistration{
+			ReadinessPolicy: ReadinessOptional,
+		},
+		Capabilities: ComponentCapabilities{
+			Checker: true,
+		},
+	}
+
+	requireJSON(t, entry, `{"component":{"name":"cache","kind":"dependency"},"registration":{"readiness_policy":"optional"},"capabilities":{"checker":true}}`)
+}
+
 func TestComponentSnapshotJSONOmitsPointerViews(t *testing.T) {
 	snapshot := ComponentSnapshot{
 		Component: ComponentInfo{

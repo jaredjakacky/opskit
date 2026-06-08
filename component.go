@@ -70,6 +70,14 @@ type ComponentCapabilities struct {
 	CommandDescriber     bool `json:"command_describer,omitempty"`
 }
 
+// ComponentEntry is the passive registry inventory view of one registered
+// component.
+type ComponentEntry struct {
+	Component    ComponentInfo         `json:"component"`
+	Registration ComponentRegistration `json:"registration"`
+	Capabilities ComponentCapabilities `json:"capabilities"`
+}
+
 // ComponentSnapshot is the combined operational view of one registered
 // component.
 type ComponentSnapshot struct {

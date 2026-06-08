@@ -148,6 +148,28 @@ func (r *Registry) Components() []Component {
 	return components
 }
 
+// Entries returns passive inventory data for all registered components in
+// registration order.
+//
+// Entries does not call component Status, Readiness, Inspect, Checks, or
+// Commands methods.
+func (r *Registry) Entries() []ComponentEntry {
+	registrations := r.snapshot()
+
+	entries := make([]ComponentEntry, 0, len(registrations))
+	for _, reg := range registrations {
+		entries = append(entries, ComponentEntry{
+			Component: reg.info,
+			Registration: ComponentRegistration{
+				ReadinessPolicy: reg.readinessPolicy,
+			},
+			Capabilities: capabilitiesOf(reg.component),
+		})
+	}
+
+	return entries
+}
+
 // Status returns the status of all registered components.
 //
 // Status calls each component's Status method synchronously. Use a context with

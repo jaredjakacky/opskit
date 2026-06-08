@@ -46,6 +46,83 @@ func TestNotReadyReadiness(t *testing.T) {
 	}
 }
 
+func TestReadinessFromItemsWithNoItems(t *testing.T) {
+	readiness := ReadinessFromItems("")
+
+	if readiness.Ready {
+		t.Fatal("Ready = true, want false")
+	}
+	if readiness.Reason != "no readiness items" {
+		t.Fatalf("Reason = %q, want no readiness items", readiness.Reason)
+	}
+	if readiness.Components != nil {
+		t.Fatalf("Components = %+v, want nil", readiness.Components)
+	}
+}
+
+func TestReadinessFromItemsWithNoItemsPreservesReason(t *testing.T) {
+	readiness := ReadinessFromItems("custom reason")
+
+	if readiness.Ready {
+		t.Fatal("Ready = true, want false")
+	}
+	if readiness.Reason != "custom reason" {
+		t.Fatalf("Reason = %q, want custom reason", readiness.Reason)
+	}
+}
+
+func TestReadinessFromItemsAllReady(t *testing.T) {
+	items := []ReadinessItem{
+		{Name: "cache", Ready: true},
+		{Name: "database", Ready: true, State: StateDegraded},
+	}
+
+	readiness := ReadinessFromItems("", items...)
+	items[0].Name = "mutated"
+
+	if !readiness.Ready {
+		t.Fatal("Ready = false, want true")
+	}
+	if readiness.Reason != "all readiness items ready" {
+		t.Fatalf("Reason = %q, want all readiness items ready", readiness.Reason)
+	}
+	if readiness.Components[0].State != StateReady {
+		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateReady)
+	}
+	if readiness.Components[1].State != StateDegraded {
+		t.Fatalf("Components[1].State = %q, want %q", readiness.Components[1].State, StateDegraded)
+	}
+	if readiness.Components[0].Name != "cache" {
+		t.Fatalf("Components[0].Name = %q, want cache", readiness.Components[0].Name)
+	}
+}
+
+func TestReadinessFromItemsNotReady(t *testing.T) {
+	readiness := ReadinessFromItems("", ReadinessItem{Name: "cache", Ready: false})
+
+	if readiness.Ready {
+		t.Fatal("Ready = true, want false")
+	}
+	if readiness.Reason != "one or more readiness items are not ready" {
+		t.Fatalf("Reason = %q, want one or more readiness items are not ready", readiness.Reason)
+	}
+	if readiness.Components[0].State != StateNotReady {
+		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateNotReady)
+	}
+}
+
+func TestReadinessFromItemsPreservesReason(t *testing.T) {
+	ready := ReadinessFromItems("custom ready", ReadinessItem{Name: "cache", Ready: true})
+	if ready.Reason != "custom ready" {
+		t.Fatalf("ready.Reason = %q, want custom ready", ready.Reason)
+	}
+
+	notReady := ReadinessFromItems("custom not ready", ReadinessItem{Name: "cache", Ready: false})
+	if notReady.Reason != "custom not ready" {
+		t.Fatalf("notReady.Reason = %q, want custom not ready", notReady.Reason)
+	}
+}
+
 func TestReadinessFromStatusReady(t *testing.T) {
 	readiness := ReadinessFromStatus(
 		ComponentInfo{Name: "component", Kind: "test"},

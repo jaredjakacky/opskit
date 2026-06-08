@@ -244,7 +244,10 @@ func cloneNamedChecks(results []NamedCheck) []NamedCheck {
 	}
 
 	cloned := make([]NamedCheck, len(results))
-	copy(cloned, results)
+	for i, result := range results {
+		result.Result.Attributes = cloneAttributes(result.Result.Attributes)
+		cloned[i] = result
+	}
 	return cloned
 }
 

@@ -44,6 +44,7 @@ func TestRegistryConcurrentRegisterAndReadModels(t *testing.T) {
 
 			for j := 0; j < components; j++ {
 				_ = registry.Components()
+				_ = registry.Entries()
 				_ = registry.Status(ctx)
 				_ = registry.Readiness(ctx)
 			}
@@ -56,6 +57,11 @@ func TestRegistryConcurrentRegisterAndReadModels(t *testing.T) {
 	registered := registry.Components()
 	if len(registered) != components {
 		t.Fatalf("Components length = %d, want %d", len(registered), components)
+	}
+
+	entries := registry.Entries()
+	if len(entries) != components {
+		t.Fatalf("Entries length = %d, want %d", len(entries), components)
 	}
 
 	status := registry.Status(ctx)

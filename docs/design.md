@@ -165,7 +165,17 @@ type Component interface {
 }
 ```
 
-`ComponentInfo` gives the component a stable operational identity.
+`ComponentInfo` gives the component a stable operational identity. Identity is
+intentionally limited to name, kind, and description for now. Stable operational
+metadata should be represented with `Attribute` values on status, inspection,
+check descriptors, command descriptors, command requests or results, and future
+event records if Opskit later defines an event envelope.
+
+Opskit may add `ComponentInfo` labels later if sibling kits demonstrate a
+concrete need for stable identity-level metadata before active status,
+inspection, check, command, or event data is available. Until then, labels in
+the broader Kit Series architecture are safe operational attributes attached to
+the relevant read model, not part of the `ComponentInfo` compatibility contract.
 
 `Status` reports the component's current local state. Status should be cheap,
 descriptive, and safe to expose.
@@ -205,6 +215,11 @@ type CommandDescriber interface {
 These optional interfaces let components participate in richer operational
 surfaces without forcing every component to implement every behavior.
 
+`Registry.Entries()` is the passive inventory view for presentation layers such
+as Servekit. It returns component identity, registration policy, and capability
+metadata without invoking component status, readiness, inspection, check, or
+command methods.
+
 ```mermaid
 classDiagram
   class Registry {
@@ -212,6 +227,7 @@ classDiagram
     +MustRegister(...)
     +Component(name) (Component, bool)
     +Components() []Component
+    +Entries() []ComponentEntry
     +Status(ctx) SystemStatus
     +Readiness(ctx) Readiness
     +Snapshot(ctx, name) (ComponentSnapshot, error)

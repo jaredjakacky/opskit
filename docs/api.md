@@ -129,6 +129,13 @@ underscores, and hyphens because presentation and telemetry layers may use
 kinds in filters, labels, dashboards, or routes. `Description` is optional human
 context for admin surfaces.
 
+`ComponentInfo` does not currently include labels. Stable operational metadata
+belongs on `Attribute` fields in the relevant read model, such as status,
+inspection, check descriptors, command descriptors, command requests or results,
+and future event records if Opskit later defines an event envelope. Opskit may
+add identity-level labels later if sibling kits demonstrate a concrete need
+before those read models are available.
+
 ### `ComponentFunc`
 
 `ComponentFunc` is the lightweight adapter for simple components:
@@ -242,13 +249,17 @@ Helpers:
 ```go
 func ReadyReadiness(reason string, components ...ReadinessItem) Readiness
 func NotReadyReadiness(reason string, components ...ReadinessItem) Readiness
+func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness
 func ReadinessFromStatus(ComponentInfo, Status) Readiness
 func ReadinessItemFromStatus(ComponentInfo, Status) ReadinessItem
 ```
 
-The helpers defensively copy component slices. `ReadinessFromStatus` produces a
-single-item readiness result derived from `Status.Ready`, `Status.State`, and
-`Status.Message`.
+The helpers defensively copy component slices. `ReadyReadiness` and
+`NotReadyReadiness` create explicit aggregate readiness results.
+`ReadinessFromItems` derives aggregate readiness from child items and is the
+safer helper when every child item must be ready for the aggregate to be ready.
+`ReadinessFromStatus` produces a single-item readiness result derived from
+`Status.Ready`, `Status.State`, and `Status.Message`.
 
 ### `ReadinessPolicy`
 
@@ -310,10 +321,15 @@ Lookup:
 ```go
 func (r *Registry) Component(name string) (Component, bool)
 func (r *Registry) Components() []Component
+func (r *Registry) Entries() []ComponentEntry
 ```
 
 `Components` returns components in registration order and returns a copy of the
 registry slice.
+
+`Entries` returns passive inventory data in registration order. It includes
+component identity, registration policy, and capabilities without calling
+component `Status`, `Readiness`, `Inspect`, `Checks`, or `Commands` methods.
 
 Read models:
 
@@ -345,6 +361,12 @@ type ComponentStatus struct {
 	Registration ComponentRegistration `json:"registration"`
 	Capabilities ComponentCapabilities `json:"capabilities"`
 	Status       Status                `json:"status"`
+}
+
+type ComponentEntry struct {
+	Component    ComponentInfo         `json:"component"`
+	Registration ComponentRegistration `json:"registration"`
+	Capabilities ComponentCapabilities `json:"capabilities"`
 }
 
 type ComponentRegistration struct {
