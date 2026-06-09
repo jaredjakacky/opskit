@@ -96,8 +96,42 @@ func TestIsValidComponentName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isValidComponentName(tt.name); got != tt.want {
-				t.Fatalf("isValidComponentName(%q) = %t, want %t", tt.name, got, tt.want)
+			if got := IsValidComponentName(tt.name); got != tt.want {
+				t.Fatalf("IsValidComponentName(%q) = %t, want %t", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateComponentName(t *testing.T) {
+	tests := []struct {
+		name string
+		want error
+	}{
+		{name: "", want: ErrEmptyComponentName},
+		{name: "   ", want: ErrEmptyComponentName},
+		{name: "component", want: nil},
+		{name: "Component_1.2-alpha", want: nil},
+		{name: "cache.primary_1-alpha", want: nil},
+		{name: " component", want: ErrInvalidComponentName},
+		{name: "component ", want: ErrInvalidComponentName},
+		{name: "component\n", want: ErrInvalidComponentName},
+		{name: "component\tname", want: ErrInvalidComponentName},
+		{name: ".", want: ErrInvalidComponentName},
+		{name: "..", want: ErrInvalidComponentName},
+		{name: "component/name", want: ErrInvalidComponentName},
+		{name: "component name", want: ErrInvalidComponentName},
+		{name: "component:name", want: ErrInvalidComponentName},
+		{name: "component@name", want: ErrInvalidComponentName},
+		{name: "component\x00name", want: ErrInvalidComponentName},
+		{name: "\u2003component", want: ErrInvalidComponentName},
+		{name: "café", want: ErrInvalidComponentName},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateComponentName(tt.name); err != tt.want {
+				t.Fatalf("ValidateComponentName(%q) error = %v, want %v", tt.name, err, tt.want)
 			}
 		})
 	}

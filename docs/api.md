@@ -111,16 +111,22 @@ operational concern.
 
 ```go
 type ComponentInfo struct {
-	Name        string `json:"name"`
-	Kind        string `json:"kind,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        string      `json:"name"`
+	Kind        string      `json:"kind,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Labels      []Attribute `json:"labels,omitempty"`
 }
+
+func ValidateComponentName(name string) error
+func IsValidComponentName(name string) bool
 ```
 
 `Name` must be unique within a registry. It must be one safe path segment using
 ASCII letters, ASCII digits, dots, underscores, and hyphens. Empty names, spaces,
 slashes, `.` and `..`, colons, and other path-hostile characters are rejected at
-registration time.
+registration time. Use `ValidateComponentName` when callers need the same
+sentinel errors returned by registration. Use `IsValidComponentName` when only a
+boolean predicate is needed.
 
 `Kind` should be low-cardinality, such as `config`, `worker_runtime`,
 `dependencies`, `clients`, `state`, or `build`. Opskit does not validate
@@ -129,12 +135,13 @@ underscores, and hyphens because presentation and telemetry layers may use
 kinds in filters, labels, dashboards, or routes. `Description` is optional human
 context for admin surfaces.
 
-`ComponentInfo` does not currently include labels. Stable operational metadata
-belongs on `Attribute` fields in the relevant read model, such as status,
-readiness, inspection, check descriptors or results, command descriptors,
-command requests or results, and future event records if Opskit later defines
-an event envelope. Opskit may add identity-level labels later if sibling kits
-demonstrate a concrete need before those read models are available.
+`Labels` are stable identity metadata for passive inventory, routing, filtering,
+dashboards, and admin presentation. Labels must be safe to expose anywhere
+`ComponentInfo` appears. Do not use labels for secrets, user data, request IDs,
+dynamic health details, or high-cardinality values.
+
+Use `Attribute` fields on status, inspection, checks, commands, and future event
+records for runtime or result-specific metadata.
 
 ### `ComponentFunc`
 
@@ -250,6 +257,7 @@ Helpers:
 func ReadyReadiness(reason string, components ...ReadinessItem) Readiness
 func NotReadyReadiness(reason string, components ...ReadinessItem) Readiness
 func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness
+func ReadinessFromPolicyItems(reason string, items ...ReadinessItem) Readiness
 func ReadinessFromStatus(ComponentInfo, Status) Readiness
 func ReadinessItemFromStatus(ComponentInfo, Status) ReadinessItem
 ```
@@ -258,6 +266,10 @@ The helpers defensively copy component slices. `ReadyReadiness` and
 `NotReadyReadiness` create explicit aggregate readiness results.
 `ReadinessFromItems` derives aggregate readiness from child items and is the
 safer helper when every child item must be ready for the aggregate to be ready.
+`ReadinessFromPolicyItems` derives aggregate readiness from required child
+items. Optional and informational child items are included in the result but do
+not block the aggregate. Missing or unknown child item policy is treated as
+`required`.
 `ReadinessFromStatus` produces a single-item readiness result derived from
 `Status.Ready`, `Status.State`, and `Status.Message`.
 
@@ -383,6 +395,13 @@ are omitted. If no required readiness components are registered, aggregate
 readiness is not ready with reason `"no required readiness components
 registered"`, even when optional components are ready. This prevents a service
 from accidentally becoming ready with no required readiness contract.
+
+Registry-level readiness policy and child item policy are separate layers.
+Registration policy controls whether the registered component blocks service
+readiness. `ReadinessItem.Policy` is for contributor-owned child aggregation,
+such as dependency groups where some children are required and others are
+optional. Contributors that need child policy should return readiness built with
+`ReadinessFromPolicyItems`.
 
 `Snapshot` returns the combined view of one component:
 
@@ -641,6 +660,9 @@ type CommandDescriber interface {
 
 type CommandHandlerFunc func(context.Context, CommandRequest) CommandResult
 ```
+
+The handler method is intentionally named `HandleCommand` rather than `Command`
+because it is the active operation on a handler, distinct from command metadata.
 
 Nil `CommandHandlerFunc` values return an unknown, rejected result instead of
 panicking. Nil contexts are normalized.

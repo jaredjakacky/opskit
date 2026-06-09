@@ -87,6 +87,60 @@ func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness {
 	}
 }
 
+// ReadinessFromPolicyItems builds a readiness result whose aggregate readiness
+// is derived from required readiness items.
+func ReadinessFromPolicyItems(reason string, items ...ReadinessItem) Readiness {
+	components := normalizePolicyReadinessItems(items)
+
+	if len(components) == 0 {
+		if reason == "" {
+			reason = "no readiness items"
+		}
+		return Readiness{
+			Ready:  false,
+			Reason: reason,
+		}
+	}
+
+	required := 0
+	ready := true
+	for _, item := range components {
+		if !blocksReadiness(item.Policy) {
+			continue
+		}
+
+		required++
+		if !item.Ready {
+			ready = false
+		}
+	}
+
+	if required == 0 {
+		if reason == "" {
+			reason = "no required readiness items"
+		}
+		return Readiness{
+			Ready:      false,
+			Reason:     reason,
+			Components: components,
+		}
+	}
+
+	if reason == "" {
+		if ready {
+			reason = "all required readiness items ready"
+		} else {
+			reason = "one or more required readiness items are not ready"
+		}
+	}
+
+	return Readiness{
+		Ready:      ready,
+		Reason:     reason,
+		Components: components,
+	}
+}
+
 // ReadinessFromStatus builds a readiness result from component status.
 func ReadinessFromStatus(info ComponentInfo, status Status) Readiness {
 	reason := "component ready"
@@ -131,6 +185,20 @@ func normalizeReadinessItems(items []ReadinessItem) []ReadinessItem {
 
 	cloned := make([]ReadinessItem, len(items))
 	for i, item := range items {
+		item.State = normalizeReadinessItemState(item.Ready, item.State)
+		cloned[i] = item
+	}
+	return cloned
+}
+
+func normalizePolicyReadinessItems(items []ReadinessItem) []ReadinessItem {
+	if len(items) == 0 {
+		return nil
+	}
+
+	cloned := make([]ReadinessItem, len(items))
+	for i, item := range items {
+		item.Policy = normalizeReadinessPolicy(item.Policy)
 		item.State = normalizeReadinessItemState(item.Ready, item.State)
 		cloned[i] = item
 	}

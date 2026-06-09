@@ -6,14 +6,21 @@ import "context"
 //
 // Name must be stable and unique within a Registry. Names must be safe single
 // path segments containing only ASCII letters, ASCII digits, dots, underscores,
-// and hyphens. Kind should be a low-cardinality category such as "config",
-// "worker_runtime", "clients", "dependencies", or "state". Kind is not
-// validated by Opskit; prefer stable, safe tokens because presentation and
+// and hyphens. Use ValidateComponentName or IsValidComponentName to check names
+// before registration. Kind should be a low-cardinality category such as
+// "config", "worker_runtime", "clients", "dependencies", or "state". Kind is
+// not validated by Opskit; prefer stable, safe tokens because presentation and
 // telemetry layers may use it in filters, labels, dashboards, or routes.
+//
+// Labels are stable identity metadata for passive inventory, routing,
+// filtering, dashboards, and admin presentation. Labels must be safe to expose
+// anywhere ComponentInfo appears. Do not use labels for secrets, user data,
+// request IDs, dynamic health details, or high-cardinality values.
 type ComponentInfo struct {
-	Name        string `json:"name"`
-	Kind        string `json:"kind,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        string      `json:"name"`
+	Kind        string      `json:"kind,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Labels      []Attribute `json:"labels,omitempty"`
 }
 
 // Component is the minimum operational contract for something that can be
@@ -103,7 +110,7 @@ type ComponentFunc struct {
 
 // ComponentInfo returns the component identity.
 func (c ComponentFunc) ComponentInfo() ComponentInfo {
-	return c.Info
+	return cloneComponentInfo(c.Info)
 }
 
 // Status returns the component status.
@@ -115,4 +122,9 @@ func (c ComponentFunc) Status(ctx context.Context) Status {
 	}
 
 	return c.Fn(ctx)
+}
+
+func cloneComponentInfo(info ComponentInfo) ComponentInfo {
+	info.Labels = cloneAttributes(info.Labels)
+	return info
 }

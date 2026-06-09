@@ -16,6 +16,7 @@ func (r *Registry) registration(name string) (registration, bool) {
 	defer r.mu.RUnlock()
 
 	reg, ok := r.registrations[name]
+	reg = cloneRegistration(reg)
 	return reg, ok
 }
 
@@ -25,10 +26,15 @@ func (r *Registry) snapshot() []registration {
 
 	registrations := make([]registration, 0, len(r.order))
 	for _, name := range r.order {
-		registrations = append(registrations, r.registrations[name])
+		registrations = append(registrations, cloneRegistration(r.registrations[name]))
 	}
 
 	return registrations
+}
+
+func cloneRegistration(reg registration) registration {
+	reg.info = cloneComponentInfo(reg.info)
+	return reg
 }
 
 func (r *Registry) ensureInitializedLocked() {
@@ -37,17 +43,19 @@ func (r *Registry) ensureInitializedLocked() {
 	}
 }
 
-func isValidComponentName(name string) bool {
-	if name == "" {
-		return false
+// ValidateComponentName verifies that name is a stable, path-safe component
+// name.
+func ValidateComponentName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return ErrEmptyComponentName
 	}
 
 	if name != strings.TrimSpace(name) {
-		return false
+		return ErrInvalidComponentName
 	}
 
 	if name == "." || name == ".." {
-		return false
+		return ErrInvalidComponentName
 	}
 
 	for _, ch := range name {
@@ -57,11 +65,17 @@ func isValidComponentName(name string) bool {
 		case ch >= '0' && ch <= '9':
 		case ch == '.', ch == '_', ch == '-':
 		default:
-			return false
+			return ErrInvalidComponentName
 		}
 	}
 
-	return true
+	return nil
+}
+
+// IsValidComponentName reports whether name is a stable, path-safe component
+// name.
+func IsValidComponentName(name string) bool {
+	return ValidateComponentName(name) == nil
 }
 
 func capabilitiesOf(component Component) ComponentCapabilities {

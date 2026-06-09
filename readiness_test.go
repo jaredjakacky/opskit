@@ -123,6 +123,143 @@ func TestReadinessFromItemsPreservesReason(t *testing.T) {
 	}
 }
 
+func TestReadinessFromPolicyItemsWithNoItems(t *testing.T) {
+	readiness := ReadinessFromPolicyItems("")
+
+	if readiness.Ready {
+		t.Fatal("Ready = true, want false")
+	}
+	if readiness.Reason != "no readiness items" {
+		t.Fatalf("Reason = %q, want no readiness items", readiness.Reason)
+	}
+	if readiness.Components != nil {
+		t.Fatalf("Components = %+v, want nil", readiness.Components)
+	}
+}
+
+func TestReadinessFromPolicyItemsWithNoItemsPreservesReason(t *testing.T) {
+	readiness := ReadinessFromPolicyItems("custom reason")
+
+	if readiness.Ready {
+		t.Fatal("Ready = true, want false")
+	}
+	if readiness.Reason != "custom reason" {
+		t.Fatalf("Reason = %q, want custom reason", readiness.Reason)
+	}
+}
+
+func TestReadinessFromPolicyItemsAllRequiredReady(t *testing.T) {
+	items := []ReadinessItem{
+		{Name: "database", Policy: ReadinessRequired, Ready: true},
+		{Name: "cache", Ready: true, State: StateDegraded},
+	}
+
+	readiness := ReadinessFromPolicyItems("", items...)
+	items[0].Name = "mutated"
+
+	if !readiness.Ready {
+		t.Fatal("Ready = false, want true")
+	}
+	if readiness.Reason != "all required readiness items ready" {
+		t.Fatalf("Reason = %q, want all required readiness items ready", readiness.Reason)
+	}
+	if readiness.Components[0].Name != "database" {
+		t.Fatalf("Components[0].Name = %q, want database", readiness.Components[0].Name)
+	}
+	if readiness.Components[0].State != StateReady {
+		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateReady)
+	}
+	if readiness.Components[1].Policy != ReadinessRequired {
+		t.Fatalf("Components[1].Policy = %q, want %q", readiness.Components[1].Policy, ReadinessRequired)
+	}
+	if readiness.Components[1].State != StateDegraded {
+		t.Fatalf("Components[1].State = %q, want %q", readiness.Components[1].State, StateDegraded)
+	}
+}
+
+func TestReadinessFromPolicyItemsRequiredNotReadyBlocks(t *testing.T) {
+	readiness := ReadinessFromPolicyItems("", ReadinessItem{
+		Name:   "database",
+		Policy: ReadinessRequired,
+		Ready:  false,
+	})
+
+	if readiness.Ready {
+		t.Fatal("Ready = true, want false")
+	}
+	if readiness.Reason != "one or more required readiness items are not ready" {
+		t.Fatalf("Reason = %q, want one or more required readiness items are not ready", readiness.Reason)
+	}
+	if readiness.Components[0].State != StateNotReady {
+		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateNotReady)
+	}
+}
+
+func TestReadinessFromPolicyItemsOptionalAndInformationalDoNotBlock(t *testing.T) {
+	readiness := ReadinessFromPolicyItems("",
+		ReadinessItem{Name: "database", Policy: ReadinessRequired, Ready: true},
+		ReadinessItem{Name: "cache", Policy: ReadinessOptional, Ready: false},
+		ReadinessItem{Name: "build", Policy: ReadinessInformational, Ready: false},
+	)
+
+	if !readiness.Ready {
+		t.Fatal("Ready = false, want true")
+	}
+	if len(readiness.Components) != 3 {
+		t.Fatalf("Components length = %d, want 3", len(readiness.Components))
+	}
+	if readiness.Components[1].Policy != ReadinessOptional {
+		t.Fatalf("Components[1].Policy = %q, want %q", readiness.Components[1].Policy, ReadinessOptional)
+	}
+	if readiness.Components[2].Policy != ReadinessInformational {
+		t.Fatalf("Components[2].Policy = %q, want %q", readiness.Components[2].Policy, ReadinessInformational)
+	}
+}
+
+func TestReadinessFromPolicyItemsWithoutRequiredItems(t *testing.T) {
+	readiness := ReadinessFromPolicyItems("",
+		ReadinessItem{Name: "cache", Policy: ReadinessOptional, Ready: true},
+		ReadinessItem{Name: "build", Policy: ReadinessInformational, Ready: true},
+	)
+
+	if readiness.Ready {
+		t.Fatal("Ready = true, want false")
+	}
+	if readiness.Reason != "no required readiness items" {
+		t.Fatalf("Reason = %q, want no required readiness items", readiness.Reason)
+	}
+	if len(readiness.Components) != 2 {
+		t.Fatalf("Components length = %d, want 2", len(readiness.Components))
+	}
+}
+
+func TestReadinessFromPolicyItemsDefaultsUnknownPolicyToRequired(t *testing.T) {
+	readiness := ReadinessFromPolicyItems("", ReadinessItem{
+		Name:   "database",
+		Policy: ReadinessPolicy("unknown"),
+		Ready:  true,
+	})
+
+	if !readiness.Ready {
+		t.Fatal("Ready = false, want true")
+	}
+	if readiness.Components[0].Policy != ReadinessRequired {
+		t.Fatalf("Components[0].Policy = %q, want %q", readiness.Components[0].Policy, ReadinessRequired)
+	}
+}
+
+func TestReadinessFromPolicyItemsPreservesReason(t *testing.T) {
+	ready := ReadinessFromPolicyItems("custom ready", ReadinessItem{Name: "database", Ready: true})
+	if ready.Reason != "custom ready" {
+		t.Fatalf("ready.Reason = %q, want custom ready", ready.Reason)
+	}
+
+	notReady := ReadinessFromPolicyItems("custom not ready", ReadinessItem{Name: "database", Ready: false})
+	if notReady.Reason != "custom not ready" {
+		t.Fatalf("notReady.Reason = %q, want custom not ready", notReady.Reason)
+	}
+}
+
 func TestReadinessFromStatusReady(t *testing.T) {
 	readiness := ReadinessFromStatus(
 		ComponentInfo{Name: "component", Kind: "test"},

@@ -147,9 +147,14 @@ Register components where the service is assembled.
 Keep component names stable. Operational consumers may put names in paths, logs,
 alerts, dashboards, and tests.
 
-Keep component kinds and attribute keys stable and low-cardinality. Opskit does
-not validate them because each presentation or telemetry layer may have its own
-field, label, or route constraints.
+Use `opskit.ValidateComponentName` or `opskit.IsValidComponentName` when sibling
+kits or applications need to check component names before registration or route
+exposure.
+
+Keep component kinds, labels, and attribute keys stable and low-cardinality.
+Opskit does not validate them because each presentation or telemetry layer may
+have its own field, label, or route constraints. Use labels for stable
+identity-level metadata and attributes for runtime or result-specific metadata.
 
 Use required readiness sparingly but deliberately. If a component blocks serving
 traffic, make it required. If it is useful but non-critical, make it optional. If

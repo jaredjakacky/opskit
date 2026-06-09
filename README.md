@@ -267,7 +267,7 @@ type Component interface {
 }
 ```
 
-`ComponentInfo` gives the component a stable operational identity. Names must be unique within a registry and safe for use in path-oriented operations surfaces. Kinds and attribute keys should be stable, low-cardinality safe tokens, but Opskit leaves stricter validation to presentation and telemetry layers.
+`ComponentInfo` gives the component a stable operational identity. Names must be unique within a registry and safe for use in path-oriented operations surfaces. Kinds, labels, and attribute keys should be stable, low-cardinality safe tokens, but Opskit leaves stricter validation to presentation and telemetry layers. Labels are stable identity metadata for passive inventory and filtering; attributes on status, inspection, checks, and commands carry runtime or result-specific metadata.
 
 `Status` reports the current component state. It should normally be a fast cached or local snapshot. Expensive work such as dependency pings, reloads, active checks, command dispatch, remote calls, or state transitions belongs in explicit check, command, worker, or application execution paths.
 
@@ -345,6 +345,9 @@ type CommandDescriber interface {
 	Commands(context.Context) []CommandDescriptor
 }
 ```
+
+The handler method is intentionally named `HandleCommand` rather than `Command`
+because it is the active operation on a handler, distinct from command metadata.
 
 `CommandDescriber` lets admin surfaces, CLIs, worker runtimes, and docs
 generators list supported commands without invoking them.
