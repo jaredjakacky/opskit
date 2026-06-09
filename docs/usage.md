@@ -74,6 +74,10 @@ names include `config`, `worker_runtime`, `cache.primary`, and
 `WorkerA`. Invalid names include empty strings, names with spaces, names with
 slashes, `.`, `..`, and path-hostile punctuation.
 
+Use `opskit.ValidateComponentName` when code needs the same sentinel errors
+returned by registration. Use `opskit.IsValidComponentName` when only a boolean
+predicate is needed.
+
 Component kinds and attribute keys should also be stable, low-cardinality safe
 tokens, but Opskit does not validate them. Presentation and telemetry layers may
 apply their own field, label, route, or dashboard constraints.

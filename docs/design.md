@@ -165,17 +165,19 @@ type Component interface {
 }
 ```
 
-`ComponentInfo` gives the component a stable operational identity. Identity is
-intentionally limited to name, kind, and description for now. Stable operational
-metadata should be represented with `Attribute` values on status, readiness,
-inspection, check descriptors or results, command descriptors, command requests
-or results, and future event records if Opskit later defines an event envelope.
+`ComponentInfo` gives the component a stable operational identity. Identity
+includes name, kind, description, and optional labels.
 
-Opskit may add `ComponentInfo` labels later if sibling kits demonstrate a
-concrete need for stable identity-level metadata before active status,
-inspection, check, command, or event data is available. Until then, labels in
-the broader Kit Series architecture are safe operational attributes attached to
-the relevant read model, not part of the `ComponentInfo` compatibility contract.
+Labels are stable identity metadata for passive inventory, routing, filtering,
+dashboards, and admin presentation. Labels must be safe to expose anywhere
+`ComponentInfo` appears. They are not runtime state. Do not use labels for
+secrets, user data, request IDs, dynamic health details, or high-cardinality
+values.
+
+Runtime or result-specific metadata should be represented with `Attribute`
+values on status, inspection, check descriptors or results, command descriptors,
+command requests or results, and future event records if Opskit later defines
+an event envelope.
 
 `Status` reports the component's current local state. Status should be cheap,
 descriptive, and safe to expose.
@@ -383,7 +385,7 @@ sequenceDiagram
       end
 
       Registry->>Registry: fill missing child item policy from registration policy
-      Registry->>Registry: required items decide aggregate Ready
+      Registry->>Registry: registration policy decides whether component blocks aggregate Ready
     end
   end
 
@@ -397,6 +399,13 @@ readiness is evaluated.
 When a readiness contributor returns child readiness items, Opskit preserves any
 explicit child item policy. If a child item omits policy, Opskit fills it from
 the component's registration policy.
+
+Contributor-owned child item policy is separate from registry-level registration
+policy. Registration policy decides whether a registered component blocks
+service readiness. Child item policy helps a contributor compute its own
+aggregate readiness when it represents a group, such as clients or dependencies
+where some children are required and others are optional. Use
+`ReadinessFromPolicyItems` for that contributor-side aggregation.
 
 ## Inspection Is Safe Diagnostic Detail
 

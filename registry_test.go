@@ -60,11 +60,23 @@ func TestRegistryEntries(t *testing.T) {
 	var registry Registry
 
 	first := testComponent{
-		info:   ComponentInfo{Name: "first", Kind: "test"},
+		info: ComponentInfo{
+			Name: "first",
+			Kind: "test",
+			Labels: []Attribute{
+				Attr("tier", "critical"),
+			},
+		},
 		status: ReadyStatus("first ready"),
 	}
 	second := &testOperationalComponent{
-		info:   ComponentInfo{Name: "second", Kind: "operational"},
+		info: ComponentInfo{
+			Name: "second",
+			Kind: "operational",
+			Labels: []Attribute{
+				Attr("scope", "admin"),
+			},
+		},
 		status: ReadyStatus("second ready"),
 	}
 
@@ -80,18 +92,14 @@ func TestRegistryEntries(t *testing.T) {
 	if len(entries) != 2 {
 		t.Fatalf("Entries length = %d, want 2", len(entries))
 	}
-	if entries[0].Component != first.info {
-		t.Fatalf("Entries[0].Component = %+v, want %+v", entries[0].Component, first.info)
-	}
+	requireComponentInfo(t, entries[0].Component, first.info)
 	if entries[0].Registration.ReadinessPolicy != ReadinessRequired {
 		t.Fatalf("Entries[0].Registration.ReadinessPolicy = %q, want %q", entries[0].Registration.ReadinessPolicy, ReadinessRequired)
 	}
 	if entries[0].Capabilities != (ComponentCapabilities{}) {
 		t.Fatalf("Entries[0].Capabilities = %+v, want none", entries[0].Capabilities)
 	}
-	if entries[1].Component != second.info {
-		t.Fatalf("Entries[1].Component = %+v, want %+v", entries[1].Component, second.info)
-	}
+	requireComponentInfo(t, entries[1].Component, second.info)
 	if entries[1].Registration.ReadinessPolicy != ReadinessOptional {
 		t.Fatalf("Entries[1].Registration.ReadinessPolicy = %q, want %q", entries[1].Registration.ReadinessPolicy, ReadinessOptional)
 	}
@@ -106,9 +114,13 @@ func TestRegistryEntries(t *testing.T) {
 	}
 
 	entries[0].Component.Name = "mutated"
+	entries[0].Component.Labels[0] = Attr("tier", "mutated")
 	entries = registry.Entries()
 	if entries[0].Component.Name != "first" {
 		t.Fatalf("Entries returned mutable registry slice, first name = %q", entries[0].Component.Name)
+	}
+	if entries[0].Component.Labels[0] != Attr("tier", "critical") {
+		t.Fatalf("Entries returned mutable component labels, labels = %+v", entries[0].Component.Labels)
 	}
 }
 
@@ -1206,6 +1218,9 @@ func TestRegistryReadModelsUseRegisteredComponentInfo(t *testing.T) {
 			Name:        "component",
 			Kind:        "test",
 			Description: "registered description",
+			Labels: []Attribute{
+				Attr("tier", "critical"),
+			},
 		},
 		status: ReadyStatus("ready"),
 	}
@@ -1219,15 +1234,26 @@ func TestRegistryReadModelsUseRegisteredComponentInfo(t *testing.T) {
 		Name:        "mutated component",
 		Kind:        "mutated",
 		Description: "mutated description",
+		Labels: []Attribute{
+			Attr("tier", "mutated"),
+		},
+	}
+
+	wantInfo := ComponentInfo{
+		Name:        "component",
+		Kind:        "test",
+		Description: "registered description",
+		Labels: []Attribute{
+			Attr("tier", "critical"),
+		},
 	}
 
 	status := registry.Status(ctx)
 	if len(status.Components) != 1 {
 		t.Fatalf("Status.Components length = %d, want 1", len(status.Components))
 	}
-	if got := status.Components[0].Component; got != (ComponentInfo{Name: "component", Kind: "test", Description: "registered description"}) {
-		t.Fatalf("Status.Component = %+v, want registered component info", got)
-	}
+	requireComponentInfo(t, status.Components[0].Component, wantInfo)
+	status.Components[0].Component.Labels[0] = Attr("tier", "mutated")
 
 	readiness := registry.Readiness(ctx)
 	if len(readiness.Components) != 1 {
@@ -1244,9 +1270,8 @@ func TestRegistryReadModelsUseRegisteredComponentInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Snapshot error = %v", err)
 	}
-	if got := snapshot.Component; got != (ComponentInfo{Name: "component", Kind: "test", Description: "registered description"}) {
-		t.Fatalf("Snapshot.Component = %+v, want registered component info", got)
-	}
+	requireComponentInfo(t, snapshot.Component, wantInfo)
+	snapshot.Component.Labels[0] = Attr("tier", "mutated")
 	if snapshot.Readiness == nil {
 		t.Fatal("Snapshot.Readiness is nil, want readiness")
 	}
@@ -1255,6 +1280,37 @@ func TestRegistryReadModelsUseRegisteredComponentInfo(t *testing.T) {
 	}
 	if got := snapshot.Readiness.Components[0].Kind; got != "test" {
 		t.Fatalf("Snapshot.Readiness.Components[0].Kind = %q, want test", got)
+	}
+
+	nextStatus := registry.Status(ctx)
+	requireComponentInfo(t, nextStatus.Components[0].Component, wantInfo)
+
+	nextSnapshot, err := registry.Snapshot(ctx, "component")
+	if err != nil {
+		t.Fatalf("Snapshot after mutation error = %v", err)
+	}
+	requireComponentInfo(t, nextSnapshot.Component, wantInfo)
+}
+
+func requireComponentInfo(t *testing.T, got, want ComponentInfo) {
+	t.Helper()
+
+	if got.Name != want.Name {
+		t.Fatalf("ComponentInfo.Name = %q, want %q", got.Name, want.Name)
+	}
+	if got.Kind != want.Kind {
+		t.Fatalf("ComponentInfo.Kind = %q, want %q", got.Kind, want.Kind)
+	}
+	if got.Description != want.Description {
+		t.Fatalf("ComponentInfo.Description = %q, want %q", got.Description, want.Description)
+	}
+	if len(got.Labels) != len(want.Labels) {
+		t.Fatalf("ComponentInfo.Labels length = %d, want %d", len(got.Labels), len(want.Labels))
+	}
+	for i := range want.Labels {
+		if got.Labels[i] != want.Labels[i] {
+			t.Fatalf("ComponentInfo.Labels[%d] = %+v, want %+v", i, got.Labels[i], want.Labels[i])
+		}
 	}
 }
 

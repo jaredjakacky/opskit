@@ -17,9 +17,12 @@ func TestComponentInfoJSONIncludesAllFields(t *testing.T) {
 		Name:        "cache",
 		Kind:        "dependency",
 		Description: "primary cache",
+		Labels: []Attribute{
+			Attr("tier", "critical"),
+		},
 	}
 
-	requireJSON(t, info, `{"name":"cache","kind":"dependency","description":"primary cache"}`)
+	requireJSON(t, info, `{"name":"cache","kind":"dependency","description":"primary cache","labels":[{"key":"tier","value":"critical"}]}`)
 }
 
 func TestReadinessPolicyValues(t *testing.T) {
@@ -73,6 +76,9 @@ func TestComponentEntryJSON(t *testing.T) {
 		Component: ComponentInfo{
 			Name: "cache",
 			Kind: "dependency",
+			Labels: []Attribute{
+				Attr("tier", "critical"),
+			},
 		},
 		Registration: ComponentRegistration{
 			ReadinessPolicy: ReadinessOptional,
@@ -82,7 +88,7 @@ func TestComponentEntryJSON(t *testing.T) {
 		},
 	}
 
-	requireJSON(t, entry, `{"component":{"name":"cache","kind":"dependency"},"registration":{"readiness_policy":"optional"},"capabilities":{"checker":true}}`)
+	requireJSON(t, entry, `{"component":{"name":"cache","kind":"dependency","labels":[{"key":"tier","value":"critical"}]},"registration":{"readiness_policy":"optional"},"capabilities":{"checker":true}}`)
 }
 
 func TestComponentSnapshotJSONOmitsPointerViews(t *testing.T) {
@@ -204,15 +210,22 @@ func TestComponentFuncComponentInfo(t *testing.T) {
 		Info: ComponentInfo{
 			Name: "cache",
 			Kind: "dependency",
+			Labels: []Attribute{
+				Attr("tier", "critical"),
+			},
 		},
 	}
 
 	info := component.ComponentInfo()
+	info.Labels[0] = Attr("tier", "mutated")
 	if info.Name != "cache" {
 		t.Fatalf("Name = %q, want cache", info.Name)
 	}
 	if info.Kind != "dependency" {
 		t.Fatalf("Kind = %q, want dependency", info.Kind)
+	}
+	if component.Info.Labels[0] != Attr("tier", "critical") {
+		t.Fatalf("ComponentInfo returned mutable labels, Labels = %+v", component.Info.Labels)
 	}
 }
 

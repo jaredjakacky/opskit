@@ -2,7 +2,6 @@ package opskit
 
 import (
 	"context"
-	"strings"
 	"sync"
 )
 
@@ -81,12 +80,9 @@ func (r *Registry) Register(component Component, opts ...RegisterOption) error {
 		return ErrNilComponent
 	}
 
-	info := component.ComponentInfo()
-	if strings.TrimSpace(info.Name) == "" {
-		return ErrEmptyComponentName
-	}
-	if !isValidComponentName(info.Name) {
-		return ErrInvalidComponentName
+	info := cloneComponentInfo(component.ComponentInfo())
+	if err := ValidateComponentName(info.Name); err != nil {
+		return err
 	}
 
 	reg := registration{
