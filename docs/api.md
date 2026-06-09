@@ -140,8 +140,9 @@ dashboards, and admin presentation. Labels must be safe to expose anywhere
 `ComponentInfo` appears. Do not use labels for secrets, user data, request IDs,
 dynamic health details, or high-cardinality values.
 
-Use `Attribute` fields on status, inspection, checks, commands, and future event
-records for runtime or result-specific metadata.
+Use `Attribute` fields on status, inspection, checks, and commands for runtime
+or result-specific metadata. If Opskit later defines a passive event envelope,
+that event shape can use the same safe attribute model.
 
 ### `ComponentFunc`
 

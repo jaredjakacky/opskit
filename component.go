@@ -35,6 +35,12 @@ type ComponentInfo struct {
 // Workerkit loops, or application-owned execution paths. Admission control
 // should use ReadinessContributor when a component needs readiness semantics
 // that differ from Status.Ready.
+//
+// Component implementations must be safe for concurrent calls to ComponentInfo,
+// Status, and any optional Opskit capability methods when shared across
+// registries, probes, admin routes, CLIs, tests, or execution layers. Opskit
+// protects registry state, but it does not serialize or synchronize component
+// internals.
 type Component interface {
 	ComponentInfo() ComponentInfo
 	Status(context.Context) Status

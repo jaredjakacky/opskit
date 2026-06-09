@@ -15,6 +15,10 @@ import (
 // expose registry data through probes or admin endpoints should pass bounded
 // contexts.
 //
+// Registry methods are safe for concurrent use. Component methods may also be
+// called concurrently through registry read paths, so component implementations
+// must protect their own mutable state.
+//
 // The zero value is ready to use.
 type Registry struct {
 	mu            sync.RWMutex

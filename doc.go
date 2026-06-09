@@ -11,4 +11,9 @@
 // component registry. It must not execute checks, dispatch commands, schedule
 // work, authorize operations, export telemetry, own lifecycle, or decide
 // application policy.
+//
+// Registry methods are safe for concurrent use, but component implementations
+// may be called concurrently by different callers. Components that expose
+// mutable state through Opskit interfaces are responsible for their own
+// synchronization.
 package opskit

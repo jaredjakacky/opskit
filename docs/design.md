@@ -154,6 +154,12 @@ descriptive methods when asked, and exposes optional capabilities.
 
 It does not own the lifecycle of the components it stores.
 
+The registry is safe for concurrent use, but it does not make component
+internals safe. Servekit routes, readiness probes, CLIs, tests, and Workerkit
+execution may call component methods at the same time. Component implementations
+that expose mutable state through Opskit interfaces must provide their own
+synchronization.
+
 ## Core Contract
 
 Every registered component implements one required interface:
