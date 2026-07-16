@@ -5,7 +5,7 @@ GOFMT ?= gofmt
 PKGS ?= ./...
 GOFILES := $(filter-out $(shell git ls-files --deleted -- '*.go'),$(shell git ls-files -- '*.go'))
 EXAMPLE_GOFILES := $(shell find examples -name '*.go' -print 2>/dev/null)
-GOVULNCHECK_VERSION ?= v1.3.0
+GOVULNCHECK_VERSION ?= v1.6.0
 ALLOW_TIDY_CHANGES ?= 0
 
 # Keep build cache inside the repo so local runs are reproducible and do not
