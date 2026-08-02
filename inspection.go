@@ -26,6 +26,10 @@ type Inspection struct {
 // state beyond basic Status and Readiness. Inspection errors may be exposed in
 // ComponentSnapshot.InspectionError, so returned errors must also be safe and
 // redacted.
+//
+// Inspect is a descriptive hook used on administrative request paths. It should
+// read bounded local or cached state and must not run checks, dispatch commands,
+// call external services, or mutate lifecycle state.
 type Inspector interface {
 	Inspect(context.Context) (Inspection, error)
 }

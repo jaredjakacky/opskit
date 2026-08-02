@@ -45,6 +45,10 @@ type Checker interface {
 }
 
 // CheckDescriber reports the operational checks a component supports.
+//
+// Checks is a passive metadata hook. It should return quickly from local state,
+// must not run checks or mutate operational state, and may be called
+// concurrently by presentation, documentation, and execution layers.
 type CheckDescriber interface {
 	Checks(context.Context) []CheckDescriptor
 }

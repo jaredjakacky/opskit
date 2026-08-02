@@ -1,8 +1,9 @@
 # Examples Guide
 
 The examples are designed to show Opskit's boundary clearly: Opskit defines
-passive contracts and read models, while applications and sibling kits decide
-when to present, execute, authorize, or schedule operational work.
+passive read models and contracts for both descriptive state and active
+capabilities, while applications and sibling kits decide when to present,
+execute, authorize, or schedule operational work.
 
 ## Reading Order
 
@@ -25,11 +26,14 @@ retry policy.
 [`examples/commands`](../examples/commands) shows passive command metadata and
 command request and result shapes. Opskit can discover `CommandDescriber` and
 `CommandHandler` implementations, but authentication, authorization,
-validation, dispatch, concurrency, and retries belong outside Opskit.
+transport validation, dispatch, concurrency, and retries belong outside Opskit.
+The handler remains responsible for command-specific decoding and semantic
+validation.
 
-## Planned Examples
+## Cross-Kit Examples
 
-The remaining integration scenarios depend on sibling Kit Series packages being
-updated around Opskit. They are listed as planned examples in
-[`examples/README.md`](../examples/README.md) rather than fake code or empty
-placeholder directories, so the repository stays buildable and honest.
+Servekit, Workerkit, Configkit, and Dependkit now contain runnable integration
+examples for the presentation, execution, and domain behavior they own. See the
+[examples directory index](../examples/README.md#cross-kit-examples) for direct
+links. Keeping those programs in sibling repositories avoids adding runtime and
+presentation dependencies to Opskit itself.

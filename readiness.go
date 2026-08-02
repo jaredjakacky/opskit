@@ -27,6 +27,10 @@ type ReadinessItem struct {
 //
 // Status answers: "what state is this component in?"
 // Readiness answers: "should this component allow the service to receive work?"
+//
+// Readiness is a descriptive hook used on probe and request paths. It should
+// return quickly from cached or local state and must not perform dependency
+// checks, call external services, schedule work, or mutate lifecycle state.
 type ReadinessContributor interface {
 	Readiness(context.Context) Readiness
 }

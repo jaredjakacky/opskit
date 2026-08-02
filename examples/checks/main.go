@@ -94,15 +94,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// The registry discovers the capability. The caller decides when to execute it.
+	// The registry discovers the capability. This trusted standalone example
+	// invokes the raw handles with a bounded context. Production services should
+	// normally bind selected handles to Workerkit so execution runs under explicit
+	// scheduling, retry, concurrency, observation, and lifecycle policy.
+	executionCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
 	fmt.Println("described checks")
 	printJSON(checks)
 
 	fmt.Println("single check")
-	printJSON(checker.Check(ctx))
+	printJSON(checker.Check(executionCtx))
 
 	fmt.Println("check group")
-	printJSON(group.CheckAll(ctx))
+	printJSON(group.CheckAll(executionCtx))
 }
 
 func printJSON(value any) {

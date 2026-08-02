@@ -2,28 +2,29 @@
 
 Opskit is the operational contract layer, not the application host.
 
-Use this guide to understand where Opskit should sit once the rest of a service
-has configuration, workers, dependencies, clients, state, HTTP presentation, and
-background execution.
+Use this guide to place Opskit between domain-owned operational state,
+Servekit presentation, and Workerkit execution without turning registration
+into implicit execution.
 
 ## The Boundary
 
-Opskit owns shared passive contracts:
+Opskit owns shared contracts and data shapes for:
 
 - component identity
 - status
 - readiness
 - inspection
-- checks and check groups
-- commands
+- active checks and check groups
+- active command handlers
+- passive descriptor and capability discovery
 - registry read models
 
 Opskit does not own runtime behavior:
 
-- HTTP routing
-- check scheduling
+- HTTP routing or response encoding
+- check scheduling or invocation
 - command dispatch
-- retries
+- retries or concurrency limits
 - lifecycle
 - authorization
 - telemetry exporting
@@ -31,94 +32,171 @@ Opskit does not own runtime behavior:
 - configuration loading
 - application policy
 
-That split is the design. Opskit gives independent packages one operational
-language without making them import each other.
+The package and registry are passive. `Checker`, `CheckGroup`, and
+`CommandHandler` describe active capability hooks, but Opskit never invokes
+those hooks. Applications explicitly select capabilities and give them to an
+execution layer.
+
+## Current Kit Series Shape
+
+The current sibling packages integrate through root Opskit contracts rather
+than illustrative pairwise adapter packages:
+
+| Package | Current Opskit relationship |
+| --- | --- |
+| Servekit | `WithOps` reads registry readiness; `WithOpsAdmin` presents read-only inventory and component snapshots |
+| Workerkit | `Runtime` implements `Component`, `ReadinessContributor`, and `Inspector`; `NewCheckLoop`, `NewCheckGroupLoop`, and `CommandFromOpskit` execute explicitly supplied active capabilities |
+| Configkit | `Manager[T]` implements `Component`, `ReadinessContributor`, and `Inspector`; `ReloadCommand` exposes a separate command component |
+| Dependkit | `Registry` implements `Component`, `ReadinessContributor`, `Inspector`, and `CheckGroup`; `CheckCommands` exposes separate command handlers |
+
+Clientkit and Statekit should follow the same import rule when their public
+Opskit integrations stabilize: implement Opskit contracts in the domain kit,
+without making Opskit import the domain kit or making domain kits import one
+another.
 
 ## Service Assembly
 
-A service should register operational components at the assembly boundary:
+Register components where the application assembles the service:
 
 ```go
 ops := opskit.NewRegistry()
 
-ops.MustRegister(configComponent, opskit.Required())
-ops.MustRegister(workerRuntimeComponent, opskit.Required())
-ops.MustRegister(dependencyComponent, opskit.Required())
-ops.MustRegister(clientComponent, opskit.Optional())
-ops.MustRegister(buildInfoComponent, opskit.Informational())
+ops.MustRegister(configManager, opskit.Required())
+ops.MustRegister(dependencies, opskit.Required())
+ops.MustRegister(runtime, opskit.Required())
+ops.MustRegister(configReload, opskit.Informational())
+ops.MustRegister(buildInfo, opskit.Informational())
 ```
 
-The registry then becomes the shared read model for HTTP presentation, worker
-execution, tests, CLIs, logs, and diagnostics.
-
-## Kit Series Shape
-
-The intended long-term Kit Series composition looks like this:
-
-```go
-ops := opskit.NewRegistry()
-
-ops.MustRegister(configkitops.Component(configManager), opskit.Required())
-ops.MustRegister(workerkitops.Component(runtime), opskit.Required())
-ops.MustRegister(dependkitops.Component(dependencies), opskit.Required())
-ops.MustRegister(clientkitops.Component(clients), opskit.Optional())
-ops.MustRegister(statekitops.Component(stateManager), opskit.Required())
-ops.MustRegister(buildInfoComponent, opskit.Informational())
-```
-
-Each domain kit owns its own behavior and maps outward into Opskit contracts.
-Opskit remains the common vocabulary.
-
-> **Planned integration: Kit Series adapters**
->
-> The adapter names above are illustrative. Servekit, Workerkit, Configkit,
-> Dependkit, Clientkit, and Statekit have not all been updated to expose stable
-> Opskit adapters yet. Do not copy those package names as working code until the
-> sibling repositories publish real adapters.
+The registry is then the shared descriptive model for HTTP presentation, tests,
+CLIs, logs, and diagnostics. Registering `dependencies` or `configReload` does
+not cause their checks or commands to run.
 
 ## Servekit Presentation
 
-Servekit is the natural place to present Opskit state over HTTP:
+Servekit presents the shared registry over HTTP:
 
 ```go
 server := servekit.New(
-	servekit.WithOpsReadiness(ops),
-	servekit.WithOpsAdmin(ops, servekit.WithAuthGate(requireAdmin)),
+	servekit.WithOps(
+		ops,
+		servekit.WithOpsAdmin(),
+		servekit.WithOpsAdminAuthGate(requireAdmin),
+		servekit.WithOpsTimeout(2*time.Second),
+	),
 )
 ```
 
-That is the right boundary because Servekit owns routing, middleware, probes,
-auth gates, response encoding, and HTTP lifecycle.
+`WithOps` adds registry readiness to Servekit's built-in `GET /readyz`
+decision. Servekit evaluates its own lifecycle gate first, then Opskit
+readiness, then any lightweight `WithReadinessChecks` predicates.
 
-> **Planned integration: Servekit presentation**
->
-> Servekit has not yet been updated with stable Opskit readiness or admin
-> presentation options. This section documents the intended integration shape,
-> not runnable code.
+`WithOpsAdmin` opts into two generic read-only routes:
+
+- `GET /admin/components` returns `Registry.Entries()` inventory without
+  evaluating component state.
+- `GET /admin/components/{name}` returns `Registry.Snapshot(...)`, including
+  status, readiness, and safe inspection when supported.
+
+These routes do not run checks, dispatch commands, or expose an active command
+endpoint. Admin routes are not enabled by `WithOps` alone and are not
+authenticated unless the application supplies `WithOpsAdminAuthGate` or
+equivalent network-level protection.
 
 ## Workerkit Execution
 
-Workerkit is the natural place to execute Opskit checks and commands:
+Workerkit executes selected Opskit capabilities under runtime policy. It does
+not scan an Opskit registry and automatically execute every discovered hook.
+
+Use `NewCheckLoop` or `NewCheckGroupLoop` for periodic checks:
 
 ```go
-runtime.Register(opskitworker.CheckGroupWorker(ops))
-runtime.Register(opskitworker.CommandWorker(ops))
+err := runtime.Register(workerkit.WorkerSpec{
+	Name: "dependencies",
+	Worker: workerkit.NewCheckGroupLoop(
+		dependencies,
+		workerkit.WithCheckInterval(30*time.Second),
+		workerkit.WithCheckTimeout(5*time.Second),
+	),
+}, workerkit.WithWorkerReadinessContribution(false))
 ```
 
-That is the right boundary because Workerkit owns lifecycle, scheduling,
-timeouts, retries, concurrency, command admission, and shutdown policy.
+Here the Dependkit registry is both the active `CheckGroup` and the cached
+dependency-readiness component. Making the Workerkit loop non-contributing
+avoids counting the same dependency gate twice when both Dependkit and the
+Workerkit runtime are registered with Opskit. The application may choose a
+different readiness authority, but it should choose one deliberately.
 
-> **Planned integration: Workerkit execution**
->
-> Workerkit has not yet been updated with stable Opskit check or command worker
-> adapters. This section documents the intended integration shape, not runnable
-> code.
+Use `CommandFromOpskit` to bind one descriptor and handler into Workerkit:
+
+```go
+descriptors := configReload.Commands(ctx)
+if len(descriptors) != 1 {
+	return fmt.Errorf("reload command descriptors = %d, want 1", len(descriptors))
+}
+
+err := runtime.Register(workerkit.WorkerSpec{
+	Name:   "config",
+	Worker: configWorker,
+}, workerkit.WithCommandSpec(
+	workerkit.CommandFromOpskit(descriptors[0], configReload),
+))
+```
+
+Workerkit then owns dispatch, admission, timeout, retry, concurrency, panic
+recovery, observation, and lifecycle policy. The Configkit handler still owns
+reload semantics and command-specific payload validation.
+
+## Configkit State And Reload
+
+`Manager[T]` directly exposes cached configuration lifecycle state through
+Opskit:
+
+```go
+manager := configkit.NewManager[AppConfig](
+	configkit.WithIdentity("config"),
+)
+ops.MustRegister(manager, opskit.Required())
+```
+
+Its status and readiness methods do not read the source or execute the config
+pipeline. Reload remains an explicit active command:
+
+```go
+reload := configkit.ReloadCommand(manager, source, pipeline)
+ops.MustRegister(reload, opskit.Informational())
+```
+
+Registering the reload component enables passive inventory and descriptor
+discovery only. Workerkit or another explicit execution layer must invoke it.
+
+## Dependkit State And Checks
+
+`*dependkit.Registry` directly exposes cached dependency state and implements
+`opskit.CheckGroup`:
+
+```go
+dependencies := dependkit.NewRegistry()
+ops.MustRegister(dependencies, opskit.Required())
+```
+
+Its `Status` and `Readiness` methods read the latest local registry snapshot;
+they do not run dependency checks. Pass the registry explicitly to
+`workerkit.NewCheckGroupLoop` when Workerkit should keep that state fresh.
+
+Manual check commands are separate:
+
+```go
+checkCommands := dependkit.CheckCommands(dependencies)
+ops.MustRegister(checkCommands, opskit.Informational())
+```
+
+Bind those descriptors and the handler through `workerkit.CommandFromOpskit`
+when operators need Workerkit-owned check-now dispatch.
 
 ## Application-Owned Composition
 
-You do not need sibling kits to use Opskit directly.
-
-Applications can define their own components now:
+Applications can implement Opskit contracts without using sibling kits:
 
 ```go
 ops.MustRegister(opskit.ComponentFunc{
@@ -134,33 +212,32 @@ ops.MustRegister(opskit.ComponentFunc{
 }, opskit.Informational())
 ```
 
-Applications can also implement richer component types that support inspection,
-checks, or commands. That keeps operational data coherent before the rest of the
-Kit Series is integrated.
-The application remains responsible for presenting registry data and invoking
-active capabilities.
+Applications remain responsible for choosing what to register, what blocks
+readiness, which active capabilities may execute, and which execution and
+presentation policies apply.
 
 ## Rules Of Thumb
 
-Register components where the service is assembled.
+Register components at the application composition root.
 
-Keep component names stable. Operational consumers may put names in paths, logs,
-alerts, dashboards, and tests.
+Keep status, readiness, inspection, and descriptor methods fast, local,
+side-effect-free, and safe for concurrent calls. Expensive work belongs in
+`Check`, `CheckAll`, `HandleCommand`, or domain-owned execution paths.
 
-Use `opskit.ValidateComponentName` or `opskit.IsValidComponentName` when sibling
-kits or applications need to check component names before registration or route
-exposure.
+Treat capability discovery as metadata, not authorization or permission to
+execute. Explicitly bind selected capabilities to Workerkit.
+
+Keep component names stable. Operational consumers may put names in paths,
+logs, alerts, dashboards, and tests. Use `opskit.ValidateComponentName` or
+`opskit.IsValidComponentName` when validating before registration.
 
 Keep component kinds, labels, and attribute keys stable and low-cardinality.
-Opskit does not validate them because each presentation or telemetry layer may
-have its own field, label, or route constraints. Use labels for stable
-identity-level metadata and attributes for runtime or result-specific metadata.
+Use labels for identity-level metadata and attributes for runtime or
+result-specific metadata.
 
-Use required readiness sparingly but deliberately. If a component blocks serving
-traffic, make it required. If it is useful but non-critical, make it optional. If
-it should never influence readiness, make it informational.
+Use required readiness deliberately. If a component blocks serving traffic,
+make it required. If it is useful but non-critical, make it optional. If it
+should never influence readiness, make it informational.
 
-Keep status passive. Use checks and commands for active work.
-
-Put auth and exposure policy outside Opskit. Opskit values are safe shapes, but
-they are not permission checks.
+Put HTTP auth and exposure policy in Servekit or the application edge. Put
+active execution policy in Workerkit or another explicit application runtime.

@@ -13,9 +13,10 @@ import (
 type CommandRequest struct {
 	Name string `json:"name"`
 	// Payload is command-specific data supplied by the caller. Command
-	// handlers are responsible for validating and interpreting it. Presentation
-	// layers that accept payloads from users must provide authentication,
-	// authorization, and request size limits before constructing CommandRequest.
+	// handlers are responsible for decoding it and validating domain semantics.
+	// Presentation layers that accept payloads from users must enforce request
+	// size limits and valid JSON, authenticate and authorize the caller, and
+	// select an allowed command before constructing CommandRequest.
 	Payload     json.RawMessage `json:"payload,omitempty"`
 	RequestedAt *time.Time      `json:"requested_at,omitempty"`
 	Attributes  []Attribute     `json:"attributes,omitempty"`
@@ -79,13 +80,18 @@ type CommandResult struct {
 //
 // HandleCommand is an execution hook. Opskit does not dispatch it, wrap it with
 // timeout or panic recovery, retry it, authorize it, audit it, limit its
-// concurrency, validate its payload, or export telemetry for it. Callers that
-// invoke HandleCommand own those policies.
+// concurrency, validate transport input, or export telemetry for it. Callers
+// that invoke HandleCommand own those execution and transport policies. The
+// handler owns command-specific payload decoding and semantic validation.
 type CommandHandler interface {
 	HandleCommand(context.Context, CommandRequest) CommandResult
 }
 
 // CommandDescriber reports the operational commands a component supports.
+//
+// Commands is a passive metadata hook. It should return quickly from local
+// state, must not invoke commands or mutate operational state, and may be called
+// concurrently by presentation, documentation, and execution layers.
 type CommandDescriber interface {
 	Commands(context.Context) []CommandDescriptor
 }
@@ -133,6 +139,11 @@ func (fn CommandHandlerFunc) HandleCommand(ctx context.Context, request CommandR
 }
 
 // AcceptedCommand returns a command result for accepted asynchronous work.
+//
+// AcceptedCommand describes admission only; it does not establish or manage the
+// lifecycle of work that continues after HandleCommand returns. Handlers should
+// hand such work to a durable queue or another explicitly managed runtime, not
+// escape caller lifecycle through an unmanaged goroutine.
 func AcceptedCommand(message string, attrs ...Attribute) CommandResult {
 	return CommandResult{
 		State:      StateInitializing,

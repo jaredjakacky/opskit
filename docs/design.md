@@ -121,36 +121,34 @@ concerns.
 
 Opskit sits at the service assembly boundary.
 
-Components register operational state and capabilities. Callers consume registry
-read models or discover optional capabilities. Presentation layers decide how to
-show them. Execution layers decide when to run them.
+Components register operational state and declare capabilities. Callers consume
+registry read models or explicitly select optional capabilities. Presentation
+layers decide how to show descriptive state. Applications wire selected active
+capabilities into execution layers, which decide when and how to run them.
 
 ```mermaid
 flowchart LR
-  App[Application Assembly] --> Registry[Opskit Registry]
-
-  Config[Config Component] --> Registry
+  Config[Config Component] --> Registry[Opskit Registry]
   Runtime[Worker Runtime Component] --> Registry
   Deps[Dependency Component] --> Registry
   Clients[Client Component] --> Registry
   State[State Component] --> Registry
   Build[Build Metadata] --> Registry
 
-  Registry --> Readiness[Readiness / Probes]
-  Registry --> Admin[Admin / Inspection]
-  Registry --> CLI[CLI Tools]
-  Registry --> Tests[Tests]
-  Registry --> Exec[Execution Layer]
-  Registry --> Telemetry[Logging / Telemetry Adapters]
+  Servekit[Servekit Presentation] -->|reads readiness and snapshots| Registry
+  CLI[CLI / Tests] -->|reads state and metadata| Registry
+  App[Application Assembly] -->|selects capabilities| Registry
+  App -->|wires explicit capabilities| Workerkit[Workerkit Execution]
+  Workerkit -->|invokes Check / CheckAll / HandleCommand| Active[Selected Component Capability]
 
-  Readiness -. presentation policy .-> Readiness
-  Admin -. auth, routing, encoding .-> Admin
-  Exec -. scheduling, retries, timeouts .-> Exec
-  Telemetry -. backend export .-> Telemetry
+  Servekit -. auth, routing, encoding .-> Servekit
+  Workerkit -. scheduling, retries, timeouts .-> Workerkit
 ```
 
 The registry is a passive read model. It stores components, evaluates their
-descriptive methods when asked, and exposes optional capabilities.
+descriptive methods when asked, and exposes optional capability handles. Passive
+means that it never invokes `Check`, `CheckAll`, or `HandleCommand`; it does not
+mean that registry reads execute no component code.
 
 It does not own the lifecycle of the components it stores.
 
@@ -546,8 +544,10 @@ operator-facing hints without running the checks.
 Opskit does not decide when checks run. It does not schedule them, retry them,
 cache them, or decide whether they should affect readiness.
 
-A worker runtime, CLI command, test, admin route, or application-owned loop can
-discover the capability and invoke it explicitly.
+A worker runtime, trusted CLI, test, or application-owned loop can discover the
+capability and invoke it explicitly. An HTTP admin route should submit active
+work through Workerkit or another execution layer rather than invoking the
+capability in the presentation layer.
 
 ## Commands Are Control-Plane Contracts
 
@@ -581,12 +581,14 @@ metadata and avoids treating the command noun as a verb.
 CLIs, worker runtimes, and docs generators discover supported command names and
 operator-facing hints without invoking the command.
 
-Opskit does not dispatch commands. It does not authorize callers. It does not
-validate user input. It does not enforce concurrency. It does not retry commands
-or audit their execution.
+Opskit does not dispatch commands. It does not authorize callers, validate
+transport input, enforce concurrency, retry commands, or audit their execution.
 
-Those responsibilities belong to the caller, usually an execution layer or a
-protected presentation layer.
+A protected presentation layer owns authentication, authorization, request
+limits, valid JSON, and selection of an allowed command. It should submit the
+request to Workerkit or another application control plane instead of invoking
+the handler directly. The execution layer owns dispatch and runtime policy; the
+domain handler owns command-specific decoding and semantic validation.
 
 ## Telemetry Stays Outside Opskit
 
@@ -643,7 +645,7 @@ sibling kit remains usable on its own.
 | Package | Owns | Relationship to Opskit |
 | --- | --- | --- |
 | Servekit | HTTP serving, probes, middleware, response encoding, admin presentation | Presents Opskit status, readiness, snapshots, and inspection over HTTP |
-| Workerkit | background execution, lifecycle, loops, retries, commands, shutdown | Executes discovered checks and commands under runtime policy |
+| Workerkit | background execution, lifecycle, loops, retries, commands, shutdown | Executes explicitly supplied checks, check groups, and command handlers under runtime policy |
 | Configkit | typed config loading, validation, snapshots, redaction, reload behavior | Reports config lifecycle state through Opskit contracts |
 | Clientkit | outbound clients, retries, propagation, classification, health state | Reports outbound client operational state through Opskit contracts |
 | Dependkit | dependency inventory, checks, stale/degraded/unavailable state | Reports dependency health and check capability through Opskit contracts |
@@ -690,7 +692,8 @@ state.
 ### 4. Capability Discovery Is Not Execution
 
 Returning a `Checker`, `CheckGroup`, or `CommandHandler` is discovery. Invoking
-it is execution.
+it is execution. Registration or capability discovery is not permission to
+execute it automatically.
 
 Opskit discovers capabilities. Callers execute them.
 
@@ -741,11 +744,12 @@ ops.MustRegister(buildInfo, opskit.Informational())
 From that one registry, different callers can get the view they need:
 
 ```text
-readiness probes -> Registry.Readiness
-admin routes     -> Registry.Status and Registry.Snapshot
-tests            -> Registry.Readiness and Registry.Inspect
-worker runtime   -> Registry.Checker and Registry.CheckGroup
-command executor -> Registry.CommandHandler
+readiness probes    -> Registry.Readiness
+admin routes        -> Registry.Entries and Registry.Snapshot
+tests and CLIs      -> Registry.Status, Registry.Readiness, and Registry.Inspect
+application wiring -> optional Registry capability accessors
+worker runtime      -> explicitly supplied Checker and CheckGroup
+command executor    -> explicitly supplied descriptor and CommandHandler
 ```
 
 The application still owns the business. Opskit owns the vocabulary.

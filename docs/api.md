@@ -7,8 +7,11 @@ fit together and what each part is for.
 
 Opskit is intentionally small. It gives services one shared operational contract
 for component identity, status, readiness, inspection, checks, and commands. It
-does not run those operations. Callers, applications, and higher-level kits
-decide when to expose, execute, authorize, or schedule them.
+does not run active checks or commands. `Checker`, `CheckGroup`, and
+`CommandHandler` are contracts for active capabilities; Opskit passively defines
+and discovers them. Callers, applications, and higher-level kits decide when to
+expose descriptive state and when to execute, authorize, or schedule active
+work.
 
 ## Design Boundaries
 
@@ -232,6 +235,10 @@ Implement this when admission policy is more nuanced than `Status.Ready`, such
 as a dependency group with multiple backends, a worker runtime with drain state,
 or a component that is degraded but still safe to serve.
 
+`Readiness` is called on probe and request paths. It should read cached or local
+state and must not perform dependency checks, call external services, schedule
+work, or mutate lifecycle state.
+
 ### `Readiness`
 
 ```go
@@ -316,6 +323,10 @@ The zero value works:
 ```go
 var registry opskit.Registry
 ```
+
+Passive means the registry never invokes `Check`, `CheckAll`, or
+`HandleCommand`. Read methods still synchronously invoke descriptive component
+methods such as `Status`, `Readiness`, `Inspect`, `Checks`, and `Commands`.
 
 Registration:
 
@@ -511,6 +522,10 @@ Use `Summary` for compact operator-facing state and `Details` for richer
 diagnostics. Both are intentionally `any` so domain kits can expose useful
 structured values without forcing a central schema.
 
+`Inspect` is a descriptive administrative hook. It should read bounded local or
+cached state and must not run checks, dispatch commands, call external services,
+or mutate lifecycle state.
+
 Inspection is not a secret vault. Presentation layers may pass inspection data
 directly to admin endpoints, logs, or support tooling. Components are
 responsible for returning only safe, redacted data.
@@ -553,6 +568,9 @@ instead of panicking. Nil contexts are normalized.
 runtimes, and docs generators list supported checks without running them. The
 descriptors are advisory; callers still own scheduling, execution, retry,
 caching, timeout, concurrency, and readiness policy.
+
+`Checks` should return quickly from local metadata, must not run checks or
+mutate operational state, and may be called concurrently.
 
 If `Registry.Checks` recovers a `CheckDescriber` panic, it returns
 `ErrComponentPanicked` without exposing the panic value.
@@ -648,7 +666,10 @@ Commands are control-plane operations. Examples include `config/reload`,
 `cache/refresh`, `index/rebuild`, and `dependency/check`.
 
 Opskit defines the request and result shape, but it does not authorize,
-validate, route, queue, retry, or execute commands.
+route, queue, retry, or execute commands. Presentation layers own transport
+validation, request limits, authentication, authorization, and selection of an
+allowed command. Handlers own command-specific decoding and semantic
+validation.
 
 ```go
 type CommandHandler interface {
@@ -670,8 +691,12 @@ panicking. Nil contexts are normalized.
 
 `CommandDescriber` is passive metadata. It helps admin surfaces, CLIs, worker
 runtimes, and docs generators list supported commands without invoking them.
-The descriptors are advisory; callers still own authorization, validation,
-routing, scheduling, concurrency, and execution.
+The descriptors are advisory; presentation and execution layers still own
+authorization, transport validation, routing, scheduling, concurrency, and
+execution. Handlers own command-specific semantic validation.
+
+`Commands` should return quickly from local metadata, must not invoke commands
+or mutate operational state, and may be called concurrently.
 
 If `Registry.Commands` recovers a `CommandDescriber` panic, it returns
 `ErrComponentPanicked` without exposing the panic value.
@@ -709,8 +734,10 @@ func NewCommandRequest(name string, payload json.RawMessage, attrs ...Attribute)
 ```
 
 `Payload` is command-specific raw JSON. Presentation layers that accept payloads
-from users must perform authentication, authorization, validation, and size
-limits before constructing a `CommandRequest`.
+from users must enforce valid JSON and size limits, authenticate and authorize
+the caller, and select an allowed command before constructing a
+`CommandRequest`. The selected handler decodes the payload and validates its
+domain semantics.
 
 `NewCommandRequest` sets `RequestedAt` to the current UTC time and defensively
 copies payload bytes and attributes. It does not validate command names or
@@ -753,6 +780,11 @@ Defaults:
 
 `Accepted` means the command was admitted, not necessarily completed. Command
 results are operational output and must contain only safe values.
+
+`AcceptedCommand` does not manage work that continues after `HandleCommand`
+returns. Such work should be handed to a durable queue or another explicitly
+managed runtime rather than an unmanaged goroutine that escapes caller
+lifecycle.
 
 ## Common Patterns
 
