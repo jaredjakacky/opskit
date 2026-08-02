@@ -31,9 +31,10 @@ For example:
 - tests can assert one shared readiness shape
 - an existing admin route can expose safe component snapshots
 
-Standalone usage keeps the same boundary. Opskit provides passive contracts and
-read models. The application still owns HTTP routing, authorization, check
-scheduling, command dispatch, retries, telemetry, and lifecycle.
+Standalone usage keeps the same boundary. Opskit provides passive read models,
+capability metadata, and contracts for active hooks. The application still owns
+HTTP routing, authorization, check scheduling, command dispatch, retries,
+telemetry, and lifecycle.
 
 ## The Normal Path
 

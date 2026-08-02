@@ -29,27 +29,35 @@ readiness policy, inspection, checks, and commands.
   A component that implements `Inspector` and returns safe diagnostic data in a
   component snapshot.
 - [checks](checks)
-  Passive `CheckDescriber`, `Checker`, and `CheckGroup` capability discovery,
-  plus explicit check execution outside the registry's passive status/readiness
-  path.
+  Passive `CheckDescriber` metadata plus discovery of active `Checker` and
+  `CheckGroup` capabilities. The trusted example caller invokes them explicitly
+  outside the registry's passive status/readiness path.
 - [commands](commands)
-  Passive `CommandHandler` discovery and one explicit operational command
-  invocation with an opaque JSON payload.
+  Passive `CommandDescriber` metadata plus discovery of an active
+  `CommandHandler`. The trusted example caller performs one low-level invocation
+  with an opaque JSON payload.
 
-## Planned Examples
+## Cross-Kit Examples
 
-Coming after v0.1, once sibling kits expose stable Opskit adapters:
+The sibling kits now contain the runnable examples for the behavior they own:
 
-- `servekit-readiness`: present registry readiness over HTTP.
-- `servekit-admin`: present status, snapshots, inspection, checks, and commands
-  through authenticated admin routes.
-- `workerkit-checks`: let Workerkit execute discovered `Checker` and
-  `CheckGroup` capabilities under runtime policy.
-- `kit-series-composition`: compose Servekit, Workerkit, Configkit, Dependkit,
-  Clientkit, Statekit, and application-owned components into one registry
-  without pairwise imports.
-- `production-composition`: show a production-shaped assembly after the
-  Servekit and Workerkit examples are real.
+- [Servekit operations](https://github.com/jaredjakacky/servekit/tree/main/examples/operations)
+  presents Opskit readiness, inventory, and read-only component snapshots over
+  HTTP with an explicit admin auth gate.
+- [Workerkit Opskit checks](https://github.com/jaredjakacky/workerkit/tree/main/examples/opskit-checks)
+  executes explicitly supplied `Checker` and `CheckGroup` capabilities under
+  Workerkit lifecycle and scheduling policy.
+- [Workerkit Opskit command](https://github.com/jaredjakacky/workerkit/tree/main/examples/opskit-command)
+  binds one descriptor and `CommandHandler` through `CommandFromOpskit`.
+- [Configkit production composition](https://github.com/jaredjakacky/configkit/tree/main/examples/10-production-composition)
+  combines Configkit state, an Opskit reload command, Workerkit dispatch, and
+  Servekit presentation.
+- [Dependkit production composition](https://github.com/jaredjakacky/dependkit/tree/main/examples/10-production-composition)
+  combines cached dependency readiness, Workerkit-owned periodic checks and
+  commands, and Servekit presentation.
+
+These examples remain in the sibling repositories so Opskit does not acquire
+runtime or presentation dependencies merely for demonstrations.
 
 ## Run Them
 

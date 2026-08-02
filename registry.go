@@ -11,6 +11,11 @@ import (
 // dispatch commands, or own lifecycle. It only stores components and provides
 // a common read model for other kits.
 //
+// Passive does not mean that registry reads execute no component code. Status,
+// Readiness, Snapshot, Inspect, Checks, and Commands synchronously call the
+// corresponding descriptive component methods. Registry never invokes the
+// active Check, CheckAll, or HandleCommand hooks.
+//
 // Registry read methods call component methods synchronously, so callers that
 // expose registry data through probes or admin endpoints should pass bounded
 // contexts.

@@ -154,20 +154,29 @@ Any presentation layer that accepts user-supplied command payloads must handle:
 - authentication
 - authorization
 - request size limits
-- JSON schema or semantic validation
+- valid JSON and transport-level validation
+- selection of an allowed command
 - audit logging where appropriate
 - timeout and cancellation policy
 
-Command handlers should return only safe `CommandResult.Result` values.
+Command handlers remain responsible for command-specific decoding and semantic
+validation. They should return only safe `CommandResult.Result` values.
 
 ## HTTP Exposure
 
-> **Planned integration: Servekit admin exposure**
->
-> Servekit does not yet expose stable Opskit admin routes. When it does, those
-> routes must be authenticated and should default to conservative exposure.
+Servekit exposes the current generic Opskit presentation path through
+`servekit.WithOps(...)`. `WithOpsAdmin()` opts into two read-only routes:
 
-Until then, applications that expose Opskit data over HTTP should:
+- `GET /admin/components`
+- `GET /admin/components/{name}`
+
+The routes present registry inventory and component snapshots. They do not run
+checks, dispatch commands, or execute other active capabilities. Admin routes
+are disabled unless `WithOpsAdmin()` is supplied and are unauthenticated unless
+the application adds `WithOpsAdminAuthGate(...)` or equivalent network-level
+protection.
+
+Applications that expose Opskit data over HTTP should:
 
 - require authentication for admin endpoints
 - authorize commands separately from status reads
@@ -178,14 +187,19 @@ Until then, applications that expose Opskit data over HTTP should:
 
 ## Worker Execution
 
-> **Planned integration: Workerkit execution**
->
-> Workerkit does not yet expose stable Opskit check or command execution
-> adapters. When it does, execution policy should live there, not in Opskit.
+Workerkit exposes the current execution path for active Opskit capabilities:
 
-Checks and commands should run under explicit timeout, retry, concurrency,
-admission, and shutdown policy. Opskit only defines the contracts and result
-shapes.
+- `workerkit.NewCheckLoop(...)` executes one `opskit.Checker` periodically.
+- `workerkit.NewCheckGroupLoop(...)` executes one `opskit.CheckGroup`
+  periodically.
+- `workerkit.CommandFromOpskit(...)` adapts one command descriptor and handler
+  into Workerkit dispatch.
+
+Applications must select and bind those capabilities explicitly. Registration
+or discovery in Opskit is not authorization or permission to execute them.
+Workerkit owns timeout, retry, concurrency, admission, panic recovery,
+observation, lifecycle, and shutdown policy; domain handlers own operation
+semantics and command-specific payload validation.
 
 ## Safe Defaults Checklist
 

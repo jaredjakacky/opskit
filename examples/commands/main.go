@@ -79,8 +79,15 @@ func main() {
 	fmt.Println("described commands")
 	printJSON(commands)
 
+	// This trusted standalone example invokes the raw handler directly with a
+	// bounded context. Production presentation layers must authenticate,
+	// authorize, and validate transport input, then submit selected commands to
+	// Workerkit or another execution layer for dispatch and lifecycle policy.
+	executionCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
 	fmt.Println("command result")
-	printJSON(handler.HandleCommand(ctx, request))
+	printJSON(handler.HandleCommand(executionCtx, request))
 }
 
 func printJSON(value any) {

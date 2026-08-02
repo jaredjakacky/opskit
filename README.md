@@ -96,7 +96,10 @@ ops.MustRegister(buildInfoComponent, opskit.Informational())
 ops.MustRegister(myCustomComponent, opskit.Optional())
 ```
 
-Then Servekit, Workerkit, tests, CLIs, or application code can consume the same registry without knowing each component's implementation details.
+Then presentation layers, tests, CLIs, and application code can consume the same
+read models without knowing each component's implementation details. Execution
+layers receive explicitly selected active capabilities rather than treating
+registration as permission to execute them.
 
 ## Using Opskit Standalone
 
@@ -125,7 +128,10 @@ configuration loading, dependency execution, outbound client construction, state
 management, telemetry exporting, dashboards, dependency injection, scheduling,
 authorization, or application lifecycle.
 
-Opskit does not execute checks or commands. `Checker`, `CheckGroup`, and `CommandHandler` are passive contracts. A runtime such as Workerkit decides when and how to execute them.
+Opskit does not execute checks or commands. `Checker`, `CheckGroup`, and
+`CommandHandler` are contracts for active capabilities; Opskit's role is limited
+to defining and discovering them. A runtime such as Workerkit decides when and
+how to execute explicitly supplied capabilities.
 
 ## Good fit / not a fit
 
@@ -247,14 +253,15 @@ That one registry already gives you:
 - required, optional, and informational readiness policy
 - capability discovery
 - safe inspection hooks
-- passive check, check group, and command contracts
+- contracts and passive discovery for active checks, check groups, and commands
 - one read model for HTTP, workers, tests, CLIs, logs, and diagnostics
 
 In practice, you get a shared operations surface without building a new adapter contract for every package combination.
 
 ## The Core Model
 
-Opskit is deliberately built around passive contracts and an explicit registry.
+Opskit is deliberately built around passive read models, explicit capability
+contracts, and an explicit registry.
 
 ### Component
 
@@ -352,7 +359,9 @@ because it is the active operation on a handler, distinct from command metadata.
 `CommandDescriber` lets admin surfaces, CLIs, worker runtimes, and docs
 generators list supported commands without invoking them.
 
-Command payloads are opaque JSON. The handler owns decoding and validation.
+Command payloads are opaque JSON. Presentation layers own transport validation,
+request limits, authentication, authorization, and selection of an allowed
+command. The handler owns command-specific decoding and semantic validation.
 
 Opskit does not dispatch commands. It does not authorize callers, apply concurrency limits, retry commands, or expose HTTP routes. Those responsibilities belong to execution and presentation layers such as Workerkit and Servekit.
 
@@ -383,16 +392,21 @@ The intended Kit Series shape is simple: domain kits report operational state
 through Opskit contracts, Servekit presents that state, and Workerkit executes
 active checks or commands under runtime policy.
 
-The exact adapter names may differ by package, but the boundary should remain stable:
+The current Kit Series integrations preserve this boundary directly:
 
-- Opskit knows what passive capabilities a component exposes.
-- Servekit decides how to present them.
-- Workerkit decides when and how to execute active work.
+- Opskit records component state and discovers supported active capabilities.
+- Servekit uses `WithOps` to present readiness, inventory, and read-only
+  component snapshots.
+- Workerkit executes explicitly supplied capabilities through `NewCheckLoop`,
+  `NewCheckGroupLoop`, and `CommandFromOpskit`.
 - Domain kits decide what their state means.
-- Applications decide policy.
+- Applications explicitly wire capabilities and decide policy.
 
-See [Composition Guide](docs/composition.md) for the planned Servekit,
-Workerkit, and domain-kit adapter shape.
+Configkit managers, Dependkit registries, and Workerkit runtimes implement their
+Opskit component contracts directly. Configkit and Dependkit expose command
+handlers separately so registration remains distinct from execution. See the
+[Composition Guide](docs/composition.md) for the current APIs and ownership
+model.
 
 ## Why This Works
 
@@ -422,8 +436,8 @@ Opskit has a small core path, but it is not limited to status and readiness. Adv
 - safe operational attributes
 - custom readiness contributors
 - safe inspection data
-- passive checker and check group contracts
-- passive command handler contracts
+- active checker and check group contracts with passive capability discovery
+- active command handler contracts with passive descriptor discovery
 - JSON-friendly duration values
 - registry-level required, optional, and informational readiness policy
 - named component snapshots for admin presentation
@@ -443,7 +457,10 @@ These are contracts, not runtime behavior. Execution policy belongs outside Opsk
 
 ## Examples
 
-Runnable programs live in [`examples/`](examples), which build from the smallest registry path outward. Future Kit Series integration examples are listed separately in [`examples/README.md`](examples/README.md).
+Runnable standalone programs live in [`examples/`](examples), which build from
+the smallest registry path outward. Current cross-kit examples are linked from
+[`examples/README.md`](examples/README.md) and remain in the sibling repositories
+that own their runtime and presentation behavior.
 
 Recommended reading order:
 
@@ -453,8 +470,8 @@ Recommended reading order:
 4. [`examples/checks`](examples/checks)
 5. [`examples/commands`](examples/commands)
 
-Kit Series integration examples will be added after the sibling adapters exist.
-The planned examples are listed in [`examples/README.md`](examples/README.md).
+For production-shaped composition, continue with the linked Servekit,
+Workerkit, Configkit, and Dependkit examples after the standalone sequence.
 
 ## API Reference
 
@@ -486,7 +503,11 @@ CI runs verification and race tests on the supported Go versions. Release tags a
 
 Bug reports, documentation fixes, small API ergonomics improvements, and compatibility issues are welcome.
 
-Opskit is intentionally scoped as a passive operational contract package. Large runtime features are likely out of scope, including HTTP routing, command dispatch, check scheduling, retries, lifecycle management, service discovery, dependency injection, telemetry exporting, authorization, dashboards, and application policy.
+Opskit is intentionally scoped as a passive operational spine and contract
+package. Large runtime features are out of scope, including HTTP routing,
+command dispatch, check scheduling, retries, lifecycle management, service
+discovery, dependency injection, telemetry exporting, authorization,
+dashboards, and application policy.
 
 For security issues, please follow [`SECURITY.md`](SECURITY.md) instead of opening a public issue.
 
