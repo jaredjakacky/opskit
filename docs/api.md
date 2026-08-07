@@ -324,9 +324,10 @@ The helpers defensively copy item slices. `ReadyReadiness` and
 `NotReadyReadiness` create explicit aggregate readiness results.
 `ReadinessFromItems` derives aggregate readiness from blocking child items.
 Non-blocking items remain visible but do not affect the result. Missing or
-unknown child impact is treated as `blocking`, and an input with no blocking
-items is not ready. Construct `Readiness` directly when a contributor owns a
-different aggregate rule.
+unknown child impact is treated as `blocking`. An empty input is not ready, but
+a non-empty input containing only explicitly non-blocking items is ready.
+Construct `Readiness` directly when a contributor owns a different aggregate
+rule.
 `ReadinessFromStatus` produces a single-item readiness result derived from
 `Status.Ready`, `Status.State`, and `Status.Message`.
 

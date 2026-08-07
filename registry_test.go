@@ -610,6 +610,40 @@ func TestRegistryReadinessOptionalParentContainsBlockingChildWithoutBlockingSyst
 	}
 }
 
+func TestRegistryReadinessRequiredParentCanBeReadyWithOnlyNonBlockingChildren(t *testing.T) {
+	registry := NewRegistry()
+	component := &testReadinessComponent{
+		info:   ComponentInfo{Name: "clients", Kind: "client_registry"},
+		status: DegradedStatus("optional clients unavailable"),
+		readiness: ReadinessFromItems("no required clients",
+			ReadinessItem{
+				Name:   "search",
+				Impact: ReadinessImpactNonBlocking,
+				Ready:  false,
+				State:  StateNotReady,
+			},
+		),
+	}
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	readiness := registry.Readiness(context.Background())
+	if !readiness.Ready {
+		t.Fatalf("system readiness = false, want true: %#v", readiness)
+	}
+	if len(readiness.Components) != 1 {
+		t.Fatalf("component count = %d, want 1", len(readiness.Components))
+	}
+	got := readiness.Components[0]
+	if !got.Readiness.Ready || got.Readiness.Reason != "no required clients" {
+		t.Fatalf("component readiness = %#v, want ready optional-only group", got.Readiness)
+	}
+	if got.Readiness.Items[0].Impact != ReadinessImpactNonBlocking {
+		t.Fatalf("child impact = %q, want %q", got.Readiness.Items[0].Impact, ReadinessImpactNonBlocking)
+	}
+}
+
 func TestRegistrySnapshotReadinessPolicies(t *testing.T) {
 	ctx := context.Background()
 	registry := NewRegistry()

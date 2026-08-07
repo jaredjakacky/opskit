@@ -122,6 +122,11 @@ and decision, and optional child items. Child item names are scoped to their
 parent, and their blocking impact does not override the parent's registry
 policy.
 
+For contributor-owned child aggregation, `ReadinessFromItems` treats an empty
+group as not ready and a non-empty group containing only explicitly
+non-blocking items as ready. This supports valid domain groups made entirely of
+optional children.
+
 If no required readiness components are registered, the aggregate readiness is
 not ready. That fail-closed behavior prevents a service from accidentally
 becoming ready with only optional or informational components.
