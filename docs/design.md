@@ -495,9 +495,12 @@ sequenceDiagram
   Registry-->>Caller: ComponentSnapshot
 ```
 
-Snapshot inspection failures are represented as data, not fatal snapshot errors.
-That lets admin surfaces still show identity, status, readiness, and capability
-metadata even when detailed inspection is broken.
+Snapshot inspection failures are represented as data, not fatal snapshot errors
+while the supplied context remains active. That lets admin surfaces still show
+identity, status, readiness, and capability metadata even when detailed
+inspection is broken. If the context expires during inspection, Snapshot
+returns the context error and a zero snapshot instead of converting expiration
+into `inspection_failure`.
 
 Registry read models also recover panics from component `Status`, `Readiness`,
 `Inspect`, `Checks`, and `Commands` methods and convert them into generic
@@ -508,6 +511,14 @@ Direct calls to `Registry.Inspect(ctx, name)` remain strict and return the
 inspector error. If inspection panics, `Inspect` returns `ErrComponentPanicked`.
 Direct calls to `Registry.Checks(ctx, name)` and `Registry.Commands(ctx, name)`
 also return `ErrComponentPanicked` when descriptor reads panic.
+
+Every context-aware Registry read checks `ctx.Err()` before invoking component
+code, after each component callback returns, and before accepting its fully
+aggregated or cloned result. A context error at those acceptance points takes
+precedence over returned data, component errors, and recovered panics. Registry
+does not create goroutines or forcibly interrupt a component that ignores
+cancellation; the late result is rejected when the component eventually
+returns.
 
 ## Checks Are Active
 

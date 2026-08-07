@@ -257,12 +257,17 @@ payloads, and enforce request size limits before constructing a
 ## Contexts
 
 Registry read methods call component methods synchronously. Pass bounded
-contexts on request paths, probe paths, and admin endpoints.
+contexts on request paths, probe paths, and admin endpoints. Registry remains
+goroutine-free and cannot interrupt a component that ignores cancellation. It
+checks the context after every component callback and again before accepting a
+fully aggregated or cloned result, so data returned after expiration is not
+reported as current.
 
 Nil contexts are normalized to `context.Background()` for registry methods and
-function adapters. Canceled contexts are respected. `Status` and `Readiness`
-return synthetic `opskit.registry` entries when evaluation is canceled before
-component calls complete.
+function adapters. `Snapshot`, `Inspect`, `Checks`, and `Commands` return the
+context error with no result when expiration is observed. `Status` and
+`Readiness` instead return synthetic `opskit.registry` entries, because their
+signatures do not include an error result.
 
 ## Examples
 

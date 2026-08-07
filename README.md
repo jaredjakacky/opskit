@@ -380,7 +380,7 @@ snapshot, err := ops.Snapshot(ctx, "component-name")
 inspection, err := ops.Inspect(ctx, "component-name")
 ```
 
-The registry is passive. It calls component read methods synchronously when asked. Probe and admin paths should pass bounded contexts.
+The registry is passive. It calls component read methods synchronously when asked. Probe and admin paths should pass bounded contexts. Registry cannot interrupt a component that ignores cancellation, but it rejects the component's result after the call returns if the context has expired.
 
 The zero value is ready to use.
 
