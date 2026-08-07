@@ -3,18 +3,17 @@ package opskit
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 )
 
 func TestCheckConstructors(t *testing.T) {
 	tests := []struct {
-		name      string
-		result    CheckResult
-		wantState State
-		wantReady bool
-		wantError string
+		name        string
+		result      CheckResult
+		wantState   State
+		wantReady   bool
+		wantFailure *Failure
 	}{
 		{
 			name:      "ready",
@@ -35,11 +34,11 @@ func TestCheckConstructors(t *testing.T) {
 			wantReady: false,
 		},
 		{
-			name:      "failed",
-			result:    FailedCheck("failed", errors.New("boom"), 150*time.Millisecond, Attr("target", "cache")),
-			wantState: StateFailed,
-			wantReady: false,
-			wantError: "boom",
+			name:        "failed",
+			result:      FailedCheckWithFailure("failed", Failure{Code: "unavailable", Message: "cache unavailable"}, 150*time.Millisecond, Attr("target", "cache")),
+			wantState:   StateFailed,
+			wantReady:   false,
+			wantFailure: &Failure{Code: "unavailable", Message: "cache unavailable"},
 		},
 	}
 
@@ -54,8 +53,8 @@ func TestCheckConstructors(t *testing.T) {
 			if tt.result.Message != tt.name {
 				t.Fatalf("Message = %q, want %q", tt.result.Message, tt.name)
 			}
-			if tt.result.Error != tt.wantError {
-				t.Fatalf("Error = %q, want %q", tt.result.Error, tt.wantError)
+			if !equalFailure(tt.result.Failure, tt.wantFailure) {
+				t.Fatalf("Failure = %+v, want %+v", tt.result.Failure, tt.wantFailure)
 			}
 			if tt.result.CheckedAt == nil {
 				t.Fatal("CheckedAt is nil")
@@ -103,8 +102,8 @@ func TestCheckConstructorsCloneAttributes(t *testing.T) {
 	}
 }
 
-func TestFailedCheckWithNilError(t *testing.T) {
-	result := FailedCheck("failed", nil, 0)
+func TestFailedCheckOmitsFailureByDefault(t *testing.T) {
+	result := FailedCheck("failed", 0)
 
 	if result.State != StateFailed {
 		t.Fatalf("State = %q, want %q", result.State, StateFailed)
@@ -112,8 +111,15 @@ func TestFailedCheckWithNilError(t *testing.T) {
 	if result.Ready {
 		t.Fatal("Ready = true, want false")
 	}
-	if result.Error != "" {
-		t.Fatalf("Error = %q, want empty", result.Error)
+	if result.Failure != nil {
+		t.Fatalf("Failure = %+v, want nil", result.Failure)
+	}
+}
+
+func TestFailedCheckWithZeroFailureOmitsFailure(t *testing.T) {
+	result := FailedCheckWithFailure("failed", Failure{}, 0)
+	if result.Failure != nil {
+		t.Fatalf("Failure = %+v, want nil", result.Failure)
 	}
 }
 
@@ -122,7 +128,7 @@ func TestFailedCheckClonesAttributes(t *testing.T) {
 		Attr("target", "cache"),
 	}
 
-	result := FailedCheck("failed", errors.New("boom"), 0, attrs...)
+	result := FailedCheck("failed", 0, attrs...)
 	attrs[0] = Attr("target", "mutated")
 
 	if len(result.Attributes) != 1 {
@@ -350,7 +356,7 @@ func TestSummarizeChecksNotReady(t *testing.T) {
 func TestSummarizeChecksFailed(t *testing.T) {
 	results := []NamedCheck{
 		{Name: "cache", Result: NotReadyCheck("down", 0)},
-		{Name: "database", Result: FailedCheck("failed", errors.New("boom"), 0)},
+		{Name: "database", Result: FailedCheck("failed", 0)},
 		{Name: "search", Result: DegradedCheck("slow", 0)},
 	}
 
@@ -364,6 +370,13 @@ func TestSummarizeChecksFailed(t *testing.T) {
 	if summary.Message != "one or more checks failed" {
 		t.Fatalf("Message = %q, want one or more checks failed", summary.Message)
 	}
+}
+
+func equalFailure(got, want *Failure) bool {
+	if got == nil || want == nil {
+		return got == want
+	}
+	return *got == *want
 }
 
 func TestSummarizeChecksPreservesMessage(t *testing.T) {
@@ -381,8 +394,9 @@ func TestCloneNamedChecks(t *testing.T) {
 		{
 			Name: "cache",
 			Kind: "dependency",
-			Result: ReadyCheck(
+			Result: FailedCheckWithFailure(
 				"ready",
+				Failure{Code: "failed", Message: "safe failure"},
 				0,
 				Attr("target", "cache"),
 			),
@@ -391,6 +405,7 @@ func TestCloneNamedChecks(t *testing.T) {
 
 	cloned := cloneNamedChecks(results)
 	results[0].Name = "mutated"
+	results[0].Result.Failure.Message = "mutated"
 	results[0].Result.Attributes[0] = Attr("target", "mutated")
 
 	if len(cloned) != 1 {
@@ -401,6 +416,9 @@ func TestCloneNamedChecks(t *testing.T) {
 	}
 	if cloned[0].Result.Attributes[0] != Attr("target", "cache") {
 		t.Fatalf("cloned[0].Result.Attributes = %+v, want target cache", cloned[0].Result.Attributes)
+	}
+	if cloned[0].Result.Failure == nil || cloned[0].Result.Failure.Message != "safe failure" {
+		t.Fatalf("cloned[0].Result.Failure = %+v, want safe failure", cloned[0].Result.Failure)
 	}
 	if got := cloneNamedChecks(nil); got != nil {
 		t.Fatalf("cloneNamedChecks(nil) = %+v, want nil", got)
@@ -420,6 +438,22 @@ func TestCheckResultJSONOmitEmptyFields(t *testing.T) {
 	}
 
 	want := `{"state":"ready","ready":true}`
+	if string(data) != want {
+		t.Fatalf("Marshal CheckResult = %s, want %s", data, want)
+	}
+}
+
+func TestCheckResultJSONIncludesFailure(t *testing.T) {
+	data, err := json.Marshal(CheckResult{
+		State:   StateFailed,
+		Ready:   false,
+		Failure: &Failure{Code: "timeout", Message: "dependency timed out"},
+	})
+	if err != nil {
+		t.Fatalf("Marshal CheckResult error = %v", err)
+	}
+
+	want := `{"state":"failed","ready":false,"failure":{"code":"timeout","message":"dependency timed out"}}`
 	if string(data) != want {
 		t.Fatalf("Marshal CheckResult = %s, want %s", data, want)
 	}

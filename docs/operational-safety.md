@@ -8,7 +8,12 @@ returned data as potentially visible.
 
 ## The Rule
 
-Anything returned through Opskit must be safe to expose.
+Any operational data value returned through Opskit must be safe to expose.
+
+This rule applies to operational data values. Ordinary Go `error` returns such
+as the error from direct `Registry.Inspect` are private diagnostic/control-flow
+channels and may contain arbitrary text. Do not copy them into public data or
+logs without an application-owned presentation policy.
 
 Do not return:
 
@@ -111,38 +116,45 @@ booleans, null values, slices, maps with string keys, or structs with stable JSO
 tags. Do not return functions, channels, cyclic values, non-finite floats, or
 values that require unavailable custom encoders.
 
-If `Inspect` returns an error while building a component snapshot, Opskit copies
-that error text into `inspection_error`. Return only safe, redacted inspection
-errors.
+If `Inspect` returns an error while building a component snapshot, Opskit omits
+the inspection and adds a generic `inspection_failure`. Arbitrary inspector
+error text is available to a direct `Registry.Inspect` caller but is never
+copied into the public snapshot.
 
 If a component `Status`, `Readiness`, `Inspect`, `Checks`, or `Commands` method
 panics during a registry read model, Opskit recovers and emits only a generic
 panic message or sentinel error. It does not expose the recovered panic value.
 
-## Check Errors
+## Check Failures
 
-`FailedCheck` copies `err.Error()` into the public `error` field:
+`FailedCheck` fails closed and does not accept or publish an `error`:
 
 ```go
-return opskit.FailedCheck("cache ping failed", safeErr, elapsed)
+return opskit.FailedCheck("cache ping failed", elapsed)
 ```
 
-Only pass errors that are already safe. If the underlying error may include
-secrets or private data, wrap or replace it before returning:
+When public detail is useful, provide it explicitly with
+`FailedCheckWithFailure`. Keep the underlying error in the owning kit or
+application for internal logging and control flow:
 
 ```go
 if err != nil {
-	return opskit.FailedCheck("cache ping failed", errors.New("timeout"), elapsed)
+	return opskit.FailedCheckWithFailure(
+		"cache ping failed",
+		opskit.Failure{Code: "timeout", Message: "cache did not respond before the deadline"},
+		elapsed,
+	)
 }
 ```
 
-## Command Results And Errors
+## Command Results And Failures
 
-`FailedCommand` copies `err.Error()` into the public `error` field.
+`FailedCommand` and `RejectedCommand` omit detailed failure text. Their
+`WithFailure` variants accept an explicit public `Failure`.
 `CompletedCommand` stores `Result` as public operational output.
 
-Return only safe command errors and result values. Do not include raw payloads,
-tokens, user data, credentials, or internal authorization details.
+Return only safe command failure detail and result values. Do not include raw
+payloads, tokens, user data, credentials, or internal authorization details.
 
 ## Command Payloads
 
@@ -182,7 +194,7 @@ Applications that expose Opskit data over HTTP should:
 - authorize commands separately from status reads
 - use bounded contexts
 - set response size limits where inspection can be large
-- decide whether check and command errors are visible to every admin caller
+- decide whether explicit check and command failure details are visible to every admin caller
 - keep public readiness probes narrower than full admin snapshots
 
 ## Worker Execution
@@ -209,8 +221,8 @@ Before exposing a component through Opskit, check:
 - status is cheap and local
 - attributes are low-cardinality and non-secret
 - inspection is redacted
-- inspection errors are safe strings
-- failed check and command errors are safe strings
+- explicit inspection, check, and command messages are public-safe
+- internal error causes remain outside Opskit results
 - command payloads are validated outside Opskit
 - command results contain only operational output
 - HTTP admin presentation is authenticated

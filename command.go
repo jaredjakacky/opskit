@@ -63,10 +63,10 @@ type CommandResult struct {
 	// completed.
 	Accepted bool   `json:"accepted"`
 	Message  string `json:"message,omitempty"`
-	// Error is exposed through operational surfaces. Command handlers must not
+	// Failure is explicit safe public failure detail. Command handlers must not
 	// include secrets, credentials, tokens, raw connection strings, or
 	// unredacted user data.
-	Error      string     `json:"error,omitempty"`
+	Failure    *Failure   `json:"failure,omitempty"`
 	StartedAt  *time.Time `json:"started_at,omitempty"`
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	Duration   Duration   `json:"duration,omitempty"`
@@ -184,14 +184,19 @@ func RejectedCommand(message string, attrs ...Attribute) CommandResult {
 	}
 }
 
-// FailedCommand returns a failed command result.
-//
-// The error text may be exposed through operational surfaces, so callers should
-// pass only safe, redacted errors.
-func FailedCommand(message string, err error, duration time.Duration, attrs ...Attribute) CommandResult {
+// RejectedCommandWithFailure returns a rejected command result with explicit
+// safe public failure detail.
+func RejectedCommandWithFailure(message string, failure Failure, attrs ...Attribute) CommandResult {
+	result := RejectedCommand(message, attrs...)
+	result.Failure = failurePtr(failure)
+	return result
+}
+
+// FailedCommand returns a failed command result without detailed failure text.
+func FailedCommand(message string, duration time.Duration, attrs ...Attribute) CommandResult {
 	now := nowUTC()
 
-	result := CommandResult{
+	return CommandResult{
 		State:      StateFailed,
 		Accepted:   true,
 		Message:    message,
@@ -200,10 +205,12 @@ func FailedCommand(message string, err error, duration time.Duration, attrs ...A
 		Duration:   NewDuration(duration),
 		Attributes: cloneAttributes(attrs),
 	}
+}
 
-	if err != nil {
-		result.Error = err.Error()
-	}
-
+// FailedCommandWithFailure returns a failed command result with explicit safe
+// public failure detail.
+func FailedCommandWithFailure(message string, failure Failure, duration time.Duration, attrs ...Attribute) CommandResult {
+	result := FailedCommand(message, duration, attrs...)
+	result.Failure = failurePtr(failure)
 	return result
 }

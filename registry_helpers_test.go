@@ -2,7 +2,6 @@ package opskit
 
 import (
 	"context"
-	"errors"
 	"testing"
 )
 
@@ -331,7 +330,7 @@ func TestCanceledComponentStatus(t *testing.T) {
 }
 
 func TestCanceledReadinessItem(t *testing.T) {
-	err := errors.New("deadline exceeded")
+	err := context.DeadlineExceeded
 	item := canceledReadinessItem(err)
 
 	if item.Name != "opskit.registry" {
@@ -351,5 +350,12 @@ func TestCanceledReadinessItem(t *testing.T) {
 	}
 	if item.Message != err.Error() {
 		t.Fatalf("Message = %q, want %q", item.Message, err.Error())
+	}
+}
+
+func TestContextFailureMessageDoesNotFormatArbitraryError(t *testing.T) {
+	err := panicOnErrorString{}
+	if got := contextFailureMessage(err); got != "context canceled" {
+		t.Fatalf("contextFailureMessage = %q, want context canceled", got)
 	}
 }

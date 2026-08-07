@@ -171,6 +171,11 @@ Read inspection directly:
 inspection, err := ops.Inspect(ctx, "cache")
 ```
 
+The direct `err` is a private diagnostic/control-flow value and may contain
+arbitrary inspector text. Do not copy it into an operational response or log
+without an application-owned presentation policy. Use `Snapshot` when a
+fail-closed public representation is required.
+
 Or include it in a full component snapshot:
 
 ```go

@@ -137,6 +137,9 @@ func TestComponentSnapshotJSONOmitsPointerViews(t *testing.T) {
 	if _, ok := got["inspection_error"]; ok {
 		t.Fatal("inspection_error field present, want omitted")
 	}
+	if _, ok := got["inspection_failure"]; ok {
+		t.Fatal("inspection_failure field present, want omitted")
+	}
 }
 
 func TestComponentSnapshotJSONIncludesOptionalViews(t *testing.T) {
@@ -179,7 +182,7 @@ func TestComponentSnapshotJSONIncludesOptionalViews(t *testing.T) {
 	}
 }
 
-func TestComponentSnapshotJSONIncludesInspectionError(t *testing.T) {
+func TestComponentSnapshotJSONIncludesInspectionFailure(t *testing.T) {
 	snapshot := ComponentSnapshot{
 		Component: ComponentInfo{
 			Name: "cache",
@@ -187,8 +190,8 @@ func TestComponentSnapshotJSONIncludesInspectionError(t *testing.T) {
 		Registration: ComponentRegistration{
 			ReadinessPolicy: ReadinessRequired,
 		},
-		Status:          ReadyStatus("ready"),
-		InspectionError: "inspection failed",
+		Status:            ReadyStatus("ready"),
+		InspectionFailure: failurePtr(Failure{Code: "inspection_failed", Message: "component inspection unavailable"}),
 	}
 
 	data, err := json.Marshal(snapshot)
@@ -200,8 +203,9 @@ func TestComponentSnapshotJSONIncludesInspectionError(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("Unmarshal ComponentSnapshot error = %v", err)
 	}
-	if got["inspection_error"] != "inspection failed" {
-		t.Fatalf("inspection_error = %q, want inspection failed", got["inspection_error"])
+	failure, ok := got["inspection_failure"].(map[string]any)
+	if !ok || failure["code"] != "inspection_failed" || failure["message"] != "component inspection unavailable" {
+		t.Fatalf("inspection_failure = %#v, want generic failure", got["inspection_failure"])
 	}
 }
 

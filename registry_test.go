@@ -2,6 +2,7 @@ package opskit
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -617,13 +618,13 @@ func TestRegistrySnapshotIncludesCapabilitiesReadinessAndInspection(t *testing.T
 	}
 }
 
-func TestRegistrySnapshotIncludesInspectionError(t *testing.T) {
+func TestRegistrySnapshotIncludesGenericInspectionFailure(t *testing.T) {
 	ctx := context.Background()
 	registry := NewRegistry()
 
 	component := errorInspectorComponent{
 		info: ComponentInfo{Name: "component", Kind: "test"},
-		err:  errors.New("inspection failed"),
+		err:  errors.New("inspection failed with secret=token"),
 	}
 
 	if err := registry.Register(component); err != nil {
@@ -649,8 +650,34 @@ func TestRegistrySnapshotIncludesInspectionError(t *testing.T) {
 	if snapshot.Inspection != nil {
 		t.Fatalf("Snapshot.Inspection = %+v, want nil", snapshot.Inspection)
 	}
-	if snapshot.InspectionError != "inspection failed" {
-		t.Fatalf("Snapshot.InspectionError = %q, want inspection failed", snapshot.InspectionError)
+	if snapshot.InspectionFailure == nil || *snapshot.InspectionFailure != (Failure{Code: FailureCodeInspectionFailed, Message: componentInspectionFailureMessage}) {
+		t.Fatalf("Snapshot.InspectionFailure = %+v, want generic failure", snapshot.InspectionFailure)
+	}
+	encoded, marshalErr := json.Marshal(snapshot)
+	if marshalErr != nil {
+		t.Fatalf("Marshal snapshot error = %v", marshalErr)
+	}
+	if strings.Contains(string(encoded), "secret=token") {
+		t.Fatalf("snapshot exposed inspector error: %s", encoded)
+	}
+}
+
+func TestRegistrySnapshotDoesNotFormatInspectorError(t *testing.T) {
+	registry := NewRegistry()
+	component := errorInspectorComponent{
+		info: ComponentInfo{Name: "component", Kind: "test"},
+		err:  panicOnErrorString{},
+	}
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	snapshot, err := registry.Snapshot(context.Background(), "component")
+	if err != nil {
+		t.Fatalf("Snapshot error = %v", err)
+	}
+	if snapshot.InspectionFailure == nil || snapshot.InspectionFailure.Code != FailureCodeInspectionFailed {
+		t.Fatalf("Snapshot.InspectionFailure = %+v, want inspection failure", snapshot.InspectionFailure)
 	}
 }
 
@@ -752,11 +779,15 @@ func TestRegistrySnapshotRecoversInspectPanic(t *testing.T) {
 	if snapshot.Inspection != nil {
 		t.Fatalf("Snapshot.Inspection = %+v, want nil", snapshot.Inspection)
 	}
-	if snapshot.InspectionError != componentInspectionPanicMessage {
-		t.Fatalf("Snapshot.InspectionError = %q, want %q", snapshot.InspectionError, componentInspectionPanicMessage)
+	if snapshot.InspectionFailure == nil || *snapshot.InspectionFailure != (Failure{Code: FailureCodeInspectionFailed, Message: componentInspectionFailureMessage}) {
+		t.Fatalf("Snapshot.InspectionFailure = %+v, want generic failure", snapshot.InspectionFailure)
 	}
-	if strings.Contains(snapshot.InspectionError, "secret") {
-		t.Fatalf("panic value exposed in inspection error %q", snapshot.InspectionError)
+	encoded, marshalErr := json.Marshal(snapshot)
+	if marshalErr != nil {
+		t.Fatalf("Marshal snapshot error = %v", marshalErr)
+	}
+	if strings.Contains(string(encoded), "secret") {
+		t.Fatalf("panic value exposed in inspection failure %s", encoded)
 	}
 }
 
@@ -790,7 +821,7 @@ func TestRegistrySnapshotIncludesInformationalInspection(t *testing.T) {
 	}
 }
 
-func TestRegistrySnapshotIncludesInformationalInspectionError(t *testing.T) {
+func TestRegistrySnapshotIncludesInformationalInspectionFailure(t *testing.T) {
 	ctx := context.Background()
 	registry := NewRegistry()
 
@@ -816,8 +847,8 @@ func TestRegistrySnapshotIncludesInformationalInspectionError(t *testing.T) {
 	if snapshot.Inspection != nil {
 		t.Fatalf("Snapshot.Inspection = %+v, want nil", snapshot.Inspection)
 	}
-	if snapshot.InspectionError != "inspection failed" {
-		t.Fatalf("Snapshot.InspectionError = %q, want inspection failed", snapshot.InspectionError)
+	if snapshot.InspectionFailure == nil || *snapshot.InspectionFailure != (Failure{Code: FailureCodeInspectionFailed, Message: componentInspectionFailureMessage}) {
+		t.Fatalf("Snapshot.InspectionFailure = %+v, want generic failure", snapshot.InspectionFailure)
 	}
 }
 
@@ -1330,6 +1361,12 @@ func (c testComponent) Status(context.Context) Status {
 type errorInspectorComponent struct {
 	info ComponentInfo
 	err  error
+}
+
+type panicOnErrorString struct{}
+
+func (panicOnErrorString) Error() string {
+	panic("inspector error was formatted")
 }
 
 func (c errorInspectorComponent) ComponentInfo() ComponentInfo {

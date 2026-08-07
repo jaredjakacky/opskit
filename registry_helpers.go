@@ -6,10 +6,17 @@ import (
 )
 
 const (
-	componentStatusPanicMessage     = "component status evaluation panicked"
-	componentReadinessPanicMessage  = "component readiness evaluation panicked"
-	componentInspectionPanicMessage = "component inspection evaluation panicked"
+	componentStatusPanicMessage       = "component status evaluation panicked"
+	componentReadinessPanicMessage    = "component readiness evaluation panicked"
+	componentInspectionFailureMessage = "component inspection unavailable"
 )
+
+func componentInspectionFailure() *Failure {
+	return failurePtr(Failure{
+		Code:    FailureCodeInspectionFailed,
+		Message: componentInspectionFailureMessage,
+	})
+}
 
 func (r *Registry) registration(name string) (registration, bool) {
 	r.mu.RLock()
@@ -246,6 +253,8 @@ func stateFromReady(ready bool) State {
 }
 
 func canceledComponentStatus(err error) ComponentStatus {
+	message := contextFailureMessage(err)
+
 	return ComponentStatus{
 		Component: ComponentInfo{
 			Name: "opskit.registry",
@@ -256,19 +265,32 @@ func canceledComponentStatus(err error) ComponentStatus {
 			Ready:   false,
 			Message: "status evaluation canceled",
 			Attributes: []Attribute{
-				Attr("error", err.Error()),
+				Attr("error", message),
 			},
 		},
 	}
 }
 
 func canceledReadinessItem(err error) ReadinessItem {
+	message := contextFailureMessage(err)
+
 	return ReadinessItem{
 		Name:    "opskit.registry",
 		Kind:    "opskit",
 		Ready:   false,
 		State:   StateUnknown,
 		Reason:  "readiness evaluation canceled",
-		Message: err.Error(),
+		Message: message,
 	}
+}
+
+// contextFailureMessage deliberately classifies rather than formats err. The
+// callers pass context.Context.Err results, but keeping this boundary closed
+// prevents a future internal caller from publishing arbitrary error text.
+func contextFailureMessage(err error) string {
+	if err == context.DeadlineExceeded {
+		return "context deadline exceeded"
+	}
+
+	return "context canceled"
 }

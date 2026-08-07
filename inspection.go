@@ -23,9 +23,9 @@ type Inspection struct {
 // Inspector reports safe operational inspection data.
 //
 // Components should implement Inspector only when they have useful diagnostic
-// state beyond basic Status and Readiness. Inspection errors may be exposed in
-// ComponentSnapshot.InspectionError, so returned errors must also be safe and
-// redacted.
+// state beyond basic Status and Readiness. Registry.Snapshot replaces
+// inspection errors with generic public failure detail; Registry.Inspect
+// returns the original error directly to its caller.
 //
 // Inspect is a descriptive hook used on administrative request paths. It should
 // read bounded local or cached state and must not run checks, dispatch commands,
