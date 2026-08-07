@@ -259,19 +259,38 @@ or a component that is degraded but still safe to serve.
 state and must not perform dependency checks, call external services, schedule
 work, or mutate lifecycle state.
 
-### `Readiness`
+### Readiness result types
 
 ```go
-type Readiness struct {
-	Ready      bool            `json:"ready"`
-	Reason     string          `json:"reason,omitempty"`
-	Components []ReadinessItem `json:"components,omitempty"`
+type SystemReadiness struct {
+	Ready      bool                 `json:"ready"`
+	Reason     string               `json:"reason,omitempty"`
+	Components []ComponentReadiness `json:"components,omitempty"`
 }
+
+type ComponentReadiness struct {
+	Component    ComponentInfo         `json:"component"`
+	Registration ComponentRegistration `json:"registration"`
+	Readiness    Readiness             `json:"readiness"`
+}
+
+type Readiness struct {
+	Ready  bool            `json:"ready"`
+	Reason string          `json:"reason,omitempty"`
+	Items  []ReadinessItem `json:"items,omitempty"`
+}
+
+type ReadinessImpact string
+
+const (
+	ReadinessImpactBlocking    ReadinessImpact = "blocking"
+	ReadinessImpactNonBlocking ReadinessImpact = "non_blocking"
+)
 
 type ReadinessItem struct {
 	Name    string          `json:"name"`
 	Kind    string          `json:"kind,omitempty"`
-	Policy  ReadinessPolicy `json:"policy,omitempty"`
+	Impact  ReadinessImpact `json:"impact,omitempty"`
 	Ready   bool            `json:"ready"`
 	State   State           `json:"state"`
 	Reason  string          `json:"reason,omitempty"`
@@ -279,25 +298,35 @@ type ReadinessItem struct {
 }
 ```
 
+`Readiness` is a component-owned result. `SystemReadiness` is the registry
+aggregate. Each `ComponentReadiness` envelope preserves the registered parent
+identity, its registry policy, and its complete component-owned result. Child
+item names are scoped to that parent, so two registered components can both
+report an item named `"payments"` without losing identity.
+
+Contributor `Readiness.Ready` is authoritative, including when it differs from
+the visible items because of a quorum, drain state, or another aggregate
+invariant. Registry aggregation uses only that value and the parent's
+registration policy; it does not recompute component readiness from child
+items.
+
 Helpers:
 
 ```go
-func ReadyReadiness(reason string, components ...ReadinessItem) Readiness
-func NotReadyReadiness(reason string, components ...ReadinessItem) Readiness
+func ReadyReadiness(reason string, items ...ReadinessItem) Readiness
+func NotReadyReadiness(reason string, items ...ReadinessItem) Readiness
 func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness
-func ReadinessFromPolicyItems(reason string, items ...ReadinessItem) Readiness
 func ReadinessFromStatus(ComponentInfo, Status) Readiness
 func ReadinessItemFromStatus(ComponentInfo, Status) ReadinessItem
 ```
 
-The helpers defensively copy component slices. `ReadyReadiness` and
+The helpers defensively copy item slices. `ReadyReadiness` and
 `NotReadyReadiness` create explicit aggregate readiness results.
-`ReadinessFromItems` derives aggregate readiness from child items and is the
-safer helper when every child item must be ready for the aggregate to be ready.
-`ReadinessFromPolicyItems` derives aggregate readiness from required child
-items. Optional and informational child items are included in the result but do
-not block the aggregate. Missing or unknown child item policy is treated as
-`required`.
+`ReadinessFromItems` derives aggregate readiness from blocking child items.
+Non-blocking items remain visible but do not affect the result. Missing or
+unknown child impact is treated as `blocking`, and an input with no blocking
+items is not ready. Construct `Readiness` directly when a contributor owns a
+different aggregate rule.
 `ReadinessFromStatus` produces a single-item readiness result derived from
 `Status.Ready`, `Status.State`, and `Status.Message`.
 
@@ -379,7 +408,7 @@ Read models:
 
 ```go
 func (r *Registry) Status(context.Context) SystemStatus
-func (r *Registry) Readiness(context.Context) Readiness
+func (r *Registry) Readiness(context.Context) SystemReadiness
 func (r *Registry) Snapshot(context.Context, name string) (ComponentSnapshot, error)
 ```
 
@@ -422,18 +451,17 @@ type ComponentRegistration struct {
 can distinguish component health from readiness policy. A not-ready optional
 component should look different from a not-ready required component.
 
-`Readiness` includes required and optional components. Informational components
-are omitted. If no required readiness components are registered, aggregate
-readiness is not ready with reason `"no required readiness components
+`SystemReadiness` includes required and optional components. Informational
+components are omitted. If no required readiness components are registered,
+aggregate readiness is not ready with reason `"no required readiness components
 registered"`, even when optional components are ready. This prevents a service
 from accidentally becoming ready with no required readiness contract.
 
-Registry-level readiness policy and child item policy are separate layers.
+Registry-level readiness policy and child item impact are separate layers.
 Registration policy controls whether the registered component blocks service
-readiness. `ReadinessItem.Policy` is for contributor-owned child aggregation,
-such as dependency groups where some children are required and others are
-optional. Contributors that need child policy should return readiness built with
-`ReadinessFromPolicyItems`.
+readiness. `ReadinessItem.Impact` is contributor-owned detail for deriving or
+explaining the parent's decision. A blocking child inside an optional registered
+parent does not override the parent's optional policy.
 
 `Snapshot` returns the combined view of one component:
 
@@ -451,7 +479,8 @@ type ComponentSnapshot struct {
 
 Snapshots include readiness for required and optional components. Informational
 components do not receive readiness snapshots, even if they implement
-`ReadinessContributor`.
+`ReadinessContributor`. `ComponentSnapshot.Registration` carries registry
+policy; `ComponentSnapshot.Readiness` remains the component-owned result.
 If inspection fails while building a snapshot, the snapshot still includes
 status, registration, capabilities, and readiness; `inspection_failure`
 contains a generic public failure with stable code `inspection_failed`, and

@@ -2,21 +2,56 @@ package opskit
 
 import "context"
 
-// Readiness describes whether a component or aggregate system can receive work.
+// SystemReadiness describes whether the registered system can receive work.
 //
-// Ready is authoritative. When Components are present, the contributor is still
-// responsible for setting Ready to the aggregate readiness decision.
-type Readiness struct {
-	Ready      bool            `json:"ready"`
-	Reason     string          `json:"reason,omitempty"`
-	Components []ReadinessItem `json:"components,omitempty"`
+// Components preserve the identity, registration policy, and component-owned
+// readiness result for each registered readiness participant.
+type SystemReadiness struct {
+	Ready      bool                 `json:"ready"`
+	Reason     string               `json:"reason,omitempty"`
+	Components []ComponentReadiness `json:"components,omitempty"`
 }
 
-// ReadinessItem describes one component's contribution to readiness.
+// ComponentReadiness is one registered component's readiness contribution.
+type ComponentReadiness struct {
+	Component    ComponentInfo         `json:"component"`
+	Registration ComponentRegistration `json:"registration"`
+	Readiness    Readiness             `json:"readiness"`
+}
+
+// Readiness describes whether one component can allow the service to receive
+// work.
+//
+// Ready is authoritative. When Items are present, the contributor is still
+// responsible for setting Ready to its aggregate readiness decision.
+type Readiness struct {
+	Ready  bool            `json:"ready"`
+	Reason string          `json:"reason,omitempty"`
+	Items  []ReadinessItem `json:"items,omitempty"`
+}
+
+// ReadinessImpact describes whether a child item can block its contributor's
+// readiness decision. It is deliberately separate from ReadinessPolicy, which
+// applies only to components registered with Registry.
+type ReadinessImpact string
+
+const (
+	// ReadinessImpactBlocking means an unsatisfied item can block its
+	// contributor's readiness decision.
+	ReadinessImpactBlocking ReadinessImpact = "blocking"
+
+	// ReadinessImpactNonBlocking means the item is readiness detail but does not
+	// block its contributor's readiness decision.
+	ReadinessImpactNonBlocking ReadinessImpact = "non_blocking"
+)
+
+// ReadinessItem describes one child or domain item within its parent
+// component's readiness result. Name is scoped to the parent component and does
+// not need to be globally unique.
 type ReadinessItem struct {
 	Name    string          `json:"name"`
 	Kind    string          `json:"kind,omitempty"`
-	Policy  ReadinessPolicy `json:"policy,omitempty"`
+	Impact  ReadinessImpact `json:"impact,omitempty"`
 	Ready   bool            `json:"ready"`
 	State   State           `json:"state"`
 	Reason  string          `json:"reason,omitempty"`
@@ -36,29 +71,31 @@ type ReadinessContributor interface {
 }
 
 // ReadyReadiness returns a ready readiness result.
-func ReadyReadiness(reason string, components ...ReadinessItem) Readiness {
+func ReadyReadiness(reason string, items ...ReadinessItem) Readiness {
 	return Readiness{
-		Ready:      true,
-		Reason:     reason,
-		Components: cloneReadinessItems(components),
+		Ready:  true,
+		Reason: reason,
+		Items:  normalizeReadinessItems(items),
 	}
 }
 
 // NotReadyReadiness returns a not-ready readiness result.
-func NotReadyReadiness(reason string, components ...ReadinessItem) Readiness {
+func NotReadyReadiness(reason string, items ...ReadinessItem) Readiness {
 	return Readiness{
-		Ready:      false,
-		Reason:     reason,
-		Components: cloneReadinessItems(components),
+		Ready:  false,
+		Reason: reason,
+		Items:  normalizeReadinessItems(items),
 	}
 }
 
 // ReadinessFromItems builds a readiness result whose aggregate readiness is
-// derived from the supplied readiness items.
+// derived from blocking readiness items. Missing and unknown impacts fail
+// closed as blocking. When no blocking items are supplied, the result is not
+// ready; callers with a different domain rule can construct Readiness directly.
 func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness {
-	components := normalizeReadinessItems(items)
+	normalized := normalizeReadinessItems(items)
 
-	if len(components) == 0 {
+	if len(normalized) == 0 {
 		if reason == "" {
 			reason = "no readiness items"
 		}
@@ -68,80 +105,42 @@ func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness {
 		}
 	}
 
+	blocking := 0
 	ready := true
-	for _, item := range components {
-		if !item.Ready {
-			ready = false
-			break
-		}
-	}
-
-	if reason == "" {
-		if ready {
-			reason = "all readiness items ready"
-		} else {
-			reason = "one or more readiness items are not ready"
-		}
-	}
-
-	return Readiness{
-		Ready:      ready,
-		Reason:     reason,
-		Components: components,
-	}
-}
-
-// ReadinessFromPolicyItems builds a readiness result whose aggregate readiness
-// is derived from required readiness items.
-func ReadinessFromPolicyItems(reason string, items ...ReadinessItem) Readiness {
-	components := normalizePolicyReadinessItems(items)
-
-	if len(components) == 0 {
-		if reason == "" {
-			reason = "no readiness items"
-		}
-		return Readiness{
-			Ready:  false,
-			Reason: reason,
-		}
-	}
-
-	required := 0
-	ready := true
-	for _, item := range components {
-		if !blocksReadiness(item.Policy) {
+	for _, item := range normalized {
+		if !blocksReadinessImpact(item.Impact) {
 			continue
 		}
 
-		required++
+		blocking++
 		if !item.Ready {
 			ready = false
 		}
 	}
 
-	if required == 0 {
+	if blocking == 0 {
 		if reason == "" {
-			reason = "no required readiness items"
+			reason = "no blocking readiness items"
 		}
 		return Readiness{
-			Ready:      false,
-			Reason:     reason,
-			Components: components,
+			Ready:  false,
+			Reason: reason,
+			Items:  normalized,
 		}
 	}
 
 	if reason == "" {
 		if ready {
-			reason = "all required readiness items ready"
+			reason = "all blocking readiness items ready"
 		} else {
-			reason = "one or more required readiness items are not ready"
+			reason = "one or more blocking readiness items are not ready"
 		}
 	}
 
 	return Readiness{
-		Ready:      ready,
-		Reason:     reason,
-		Components: components,
+		Ready:  ready,
+		Reason: reason,
+		Items:  normalized,
 	}
 }
 
@@ -155,7 +154,7 @@ func ReadinessFromStatus(info ComponentInfo, status Status) Readiness {
 	return Readiness{
 		Ready:  status.Ready,
 		Reason: reason,
-		Components: []ReadinessItem{
+		Items: []ReadinessItem{
 			ReadinessItemFromStatus(info, status),
 		},
 	}
@@ -166,20 +165,11 @@ func ReadinessItemFromStatus(info ComponentInfo, status Status) ReadinessItem {
 	return ReadinessItem{
 		Name:    info.Name,
 		Kind:    info.Kind,
+		Impact:  ReadinessImpactBlocking,
 		Ready:   status.Ready,
 		State:   normalizeReadinessItemState(status.Ready, status.State),
 		Message: status.Message,
 	}
-}
-
-func cloneReadinessItems(items []ReadinessItem) []ReadinessItem {
-	if len(items) == 0 {
-		return nil
-	}
-
-	cloned := make([]ReadinessItem, len(items))
-	copy(cloned, items)
-	return cloned
 }
 
 func normalizeReadinessItems(items []ReadinessItem) []ReadinessItem {
@@ -189,22 +179,22 @@ func normalizeReadinessItems(items []ReadinessItem) []ReadinessItem {
 
 	cloned := make([]ReadinessItem, len(items))
 	for i, item := range items {
+		item.Impact = normalizeReadinessImpact(item.Impact)
 		item.State = normalizeReadinessItemState(item.Ready, item.State)
 		cloned[i] = item
 	}
 	return cloned
 }
 
-func normalizePolicyReadinessItems(items []ReadinessItem) []ReadinessItem {
-	if len(items) == 0 {
-		return nil
+func normalizeReadinessImpact(impact ReadinessImpact) ReadinessImpact {
+	switch impact {
+	case ReadinessImpactBlocking, ReadinessImpactNonBlocking:
+		return impact
+	default:
+		return ReadinessImpactBlocking
 	}
+}
 
-	cloned := make([]ReadinessItem, len(items))
-	for i, item := range items {
-		item.Policy = normalizeReadinessPolicy(item.Policy)
-		item.State = normalizeReadinessItemState(item.Ready, item.State)
-		cloned[i] = item
-	}
-	return cloned
+func blocksReadinessImpact(impact ReadinessImpact) bool {
+	return normalizeReadinessImpact(impact) == ReadinessImpactBlocking
 }

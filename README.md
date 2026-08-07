@@ -223,27 +223,63 @@ The aggregate readiness remains ready because `config` is required and ready, wh
 ```json
 {
   "ready": true,
-  "reason": "all readiness components ready",
+  "reason": "all required readiness components ready",
   "components": [
     {
-      "name": "config",
-      "kind": "config",
-      "policy": "required",
-      "ready": true,
-      "state": "ready",
-      "message": "configuration loaded"
+      "component": {
+        "name": "config",
+        "kind": "config",
+        "description": "application configuration"
+      },
+      "registration": {
+        "readiness_policy": "required"
+      },
+      "readiness": {
+        "ready": true,
+        "reason": "component ready",
+        "items": [
+          {
+            "name": "config",
+            "kind": "config",
+            "impact": "blocking",
+            "ready": true,
+            "state": "ready",
+            "message": "configuration loaded"
+          }
+        ]
+      }
     },
     {
-      "name": "search",
-      "kind": "client",
-      "policy": "optional",
-      "ready": false,
-      "state": "not_ready",
-      "message": "search API unavailable"
+      "component": {
+        "name": "search",
+        "kind": "client",
+        "description": "optional search enrichment client"
+      },
+      "registration": {
+        "readiness_policy": "optional"
+      },
+      "readiness": {
+        "ready": false,
+        "reason": "component not ready",
+        "items": [
+          {
+            "name": "search",
+            "kind": "client",
+            "impact": "blocking",
+            "ready": false,
+            "state": "not_ready",
+            "message": "search API unavailable"
+          }
+        ]
+      }
     }
   ]
 }
 ```
+
+The two levels are intentional: `registration.readiness_policy` says whether
+the registered parent blocks service readiness, while child `impact` belongs to
+the component's own readiness domain.
 
 That one registry already gives you:
 

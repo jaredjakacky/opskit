@@ -155,8 +155,8 @@ func TestRegistryReadinessReportsCancellationAtFinalAcceptance(t *testing.T) {
 
 	readiness := registry.Readiness(ctx)
 	requireCanceledRegistryReadiness(t, readiness, 1, context.DeadlineExceeded)
-	if readiness.Components[0].Name != "component" {
-		t.Fatalf("first readiness component = %q, want accepted component", readiness.Components[0].Name)
+	if readiness.Components[0].Component.Name != "component" {
+		t.Fatalf("first readiness component = %q, want accepted component", readiness.Components[0].Component.Name)
 	}
 }
 
@@ -485,7 +485,7 @@ func requireCanceledSystemStatus(t *testing.T, status SystemStatus, accepted int
 	}
 }
 
-func requireCanceledRegistryReadiness(t *testing.T, readiness Readiness, accepted int, wantErr error) {
+func requireCanceledRegistryReadiness(t *testing.T, readiness SystemReadiness, accepted int, wantErr error) {
 	t.Helper()
 
 	if readiness.Ready || readiness.Reason != "readiness evaluation canceled" {
@@ -495,8 +495,15 @@ func requireCanceledRegistryReadiness(t *testing.T, readiness Readiness, accepte
 		t.Fatalf("readiness component count = %d, want %d accepted plus cancellation", len(readiness.Components), accepted)
 	}
 	canceled := readiness.Components[len(readiness.Components)-1]
-	if canceled.Name != "opskit.registry" || canceled.State != StateUnknown || canceled.Ready || canceled.Message != contextFailureMessage(wantErr) {
-		t.Fatalf("cancellation item = %#v, want classified context cancellation", canceled)
+	if canceled.Component.Name != "opskit.registry" || canceled.Registration.ReadinessPolicy != ReadinessRequired || canceled.Readiness.Ready || canceled.Readiness.Reason != "readiness evaluation canceled" {
+		t.Fatalf("cancellation component = %#v, want required not-ready opskit.registry", canceled)
+	}
+	if len(canceled.Readiness.Items) != 1 {
+		t.Fatalf("cancellation item count = %d, want 1", len(canceled.Readiness.Items))
+	}
+	item := canceled.Readiness.Items[0]
+	if item.Name != "opskit.registry" || item.State != StateUnknown || item.Ready || item.Message != contextFailureMessage(wantErr) {
+		t.Fatalf("cancellation item = %#v, want classified context cancellation", item)
 	}
 }
 

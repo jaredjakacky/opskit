@@ -239,17 +239,17 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 // synchronously. Use a context with an appropriate deadline for probe paths. If
 // evaluation is canceled before or during evaluation, Readiness discards any
 // component result that crossed the cancellation boundary and includes a
-// synthetic opskit.registry item after any earlier accepted items. If a
-// component readiness or status method panics, Readiness recovers and returns
-// an unknown not-ready item without exposing the panic value.
-func (r *Registry) Readiness(ctx context.Context) Readiness {
+// synthetic opskit.registry component after any earlier accepted components. If
+// a component readiness or status method panics, Readiness recovers and returns
+// an unknown not-ready component result without exposing the panic value.
+func (r *Registry) Readiness(ctx context.Context) SystemReadiness {
 	ctx = normalizeContext(ctx)
 
 	registrations := r.snapshot()
 
-	readiness := Readiness{
+	readiness := SystemReadiness{
 		Ready:      true,
-		Components: make([]ReadinessItem, 0, len(registrations)),
+		Components: make([]ComponentReadiness, 0, len(registrations)),
 	}
 	if err := ctx.Err(); err != nil {
 		return canceledRegistryReadiness(readiness, err)
@@ -269,7 +269,7 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 		component := reg.component
 
 		if contributor, ok := component.(ReadinessContributor); ok {
-			componentReadiness, _ := safeComponentReadiness(contributor, ctx, reg.info, reg.readinessPolicy)
+			result, _ := safeComponentReadiness(contributor, ctx, reg.info)
 			if err := ctx.Err(); err != nil {
 				return canceledRegistryReadiness(readiness, err)
 			}
@@ -278,11 +278,11 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 				required++
 			}
 
-			if blocksReadiness(reg.readinessPolicy) && !componentReadiness.Ready {
+			if blocksReadiness(reg.readinessPolicy) && !result.Ready {
 				readiness.Ready = false
 			}
 
-			readiness.Components = append(readiness.Components, componentReadiness.Components...)
+			readiness.Components = append(readiness.Components, componentReadiness(reg.info, reg.readinessPolicy, result))
 			continue
 		}
 
@@ -290,29 +290,29 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 		if err := ctx.Err(); err != nil {
 			return canceledRegistryReadiness(readiness, err)
 		}
-		componentReadiness := readinessFromStatusWithPolicy(reg.info, status, reg.readinessPolicy)
+		result := ReadinessFromStatus(reg.info, status)
 		if panicked {
-			componentReadiness = panickedReadiness(reg.info, reg.readinessPolicy, componentStatusPanicMessage)
+			result = panickedReadiness(reg.info, componentStatusPanicMessage)
 		}
 
 		if blocksReadiness(reg.readinessPolicy) {
 			required++
 		}
 
-		if blocksReadiness(reg.readinessPolicy) && !status.Ready {
+		if blocksReadiness(reg.readinessPolicy) && !result.Ready {
 			readiness.Ready = false
 		}
 
-		readiness.Components = append(readiness.Components, componentReadiness.Components...)
+		readiness.Components = append(readiness.Components, componentReadiness(reg.info, reg.readinessPolicy, result))
 	}
 
 	if required == 0 {
 		readiness.Ready = false
 		readiness.Reason = "no required readiness components registered"
 	} else if readiness.Ready {
-		readiness.Reason = "all readiness components ready"
+		readiness.Reason = "all required readiness components ready"
 	} else {
-		readiness.Reason = "one or more readiness components are not ready"
+		readiness.Reason = "one or more required readiness components are not ready"
 	}
 	if err := ctx.Err(); err != nil {
 		return canceledRegistryReadiness(readiness, err)
@@ -361,13 +361,13 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 
 	if participatesInReadiness(reg.readinessPolicy) {
 		if contributor, ok := component.(ReadinessContributor); ok {
-			readiness, _ := safeComponentReadiness(contributor, ctx, reg.info, reg.readinessPolicy)
+			readiness, _ := safeComponentReadiness(contributor, ctx, reg.info)
 			snapshot.Readiness = &readiness
 		} else if statusPanicked {
-			readiness := panickedReadiness(reg.info, reg.readinessPolicy, componentStatusPanicMessage)
+			readiness := panickedReadiness(reg.info, componentStatusPanicMessage)
 			snapshot.Readiness = &readiness
 		} else {
-			readiness := readinessFromStatusWithPolicy(reg.info, snapshot.Status, reg.readinessPolicy)
+			readiness := ReadinessFromStatus(reg.info, snapshot.Status)
 			snapshot.Readiness = &readiness
 		}
 

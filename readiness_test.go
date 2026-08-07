@@ -16,11 +16,14 @@ func TestReadyReadiness(t *testing.T) {
 	if readiness.Reason != "all ready" {
 		t.Fatalf("Reason = %q, want all ready", readiness.Reason)
 	}
-	if len(readiness.Components) != 1 {
-		t.Fatalf("Components length = %d, want 1", len(readiness.Components))
+	if len(readiness.Items) != 1 {
+		t.Fatalf("Items length = %d, want 1", len(readiness.Items))
 	}
-	if readiness.Components[0].Name != "component" {
-		t.Fatalf("Components[0].Name = %q, want component", readiness.Components[0].Name)
+	if readiness.Items[0].Name != "component" {
+		t.Fatalf("Items[0].Name = %q, want component", readiness.Items[0].Name)
+	}
+	if readiness.Items[0].Impact != ReadinessImpactBlocking {
+		t.Fatalf("Items[0].Impact = %q, want %q", readiness.Items[0].Impact, ReadinessImpactBlocking)
 	}
 }
 
@@ -38,11 +41,11 @@ func TestNotReadyReadiness(t *testing.T) {
 	if readiness.Reason != "not ready" {
 		t.Fatalf("Reason = %q, want not ready", readiness.Reason)
 	}
-	if len(readiness.Components) != 1 {
-		t.Fatalf("Components length = %d, want 1", len(readiness.Components))
+	if len(readiness.Items) != 1 {
+		t.Fatalf("Items length = %d, want 1", len(readiness.Items))
 	}
-	if readiness.Components[0].Name != "component" {
-		t.Fatalf("Components[0].Name = %q, want component", readiness.Components[0].Name)
+	if readiness.Items[0].Name != "component" {
+		t.Fatalf("Items[0].Name = %q, want component", readiness.Items[0].Name)
 	}
 }
 
@@ -55,8 +58,8 @@ func TestReadinessFromItemsWithNoItems(t *testing.T) {
 	if readiness.Reason != "no readiness items" {
 		t.Fatalf("Reason = %q, want no readiness items", readiness.Reason)
 	}
-	if readiness.Components != nil {
-		t.Fatalf("Components = %+v, want nil", readiness.Components)
+	if readiness.Items != nil {
+		t.Fatalf("Items = %+v, want nil", readiness.Items)
 	}
 }
 
@@ -83,17 +86,17 @@ func TestReadinessFromItemsAllReady(t *testing.T) {
 	if !readiness.Ready {
 		t.Fatal("Ready = false, want true")
 	}
-	if readiness.Reason != "all readiness items ready" {
-		t.Fatalf("Reason = %q, want all readiness items ready", readiness.Reason)
+	if readiness.Reason != "all blocking readiness items ready" {
+		t.Fatalf("Reason = %q, want all blocking readiness items ready", readiness.Reason)
 	}
-	if readiness.Components[0].State != StateReady {
-		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateReady)
+	if readiness.Items[0].State != StateReady {
+		t.Fatalf("Items[0].State = %q, want %q", readiness.Items[0].State, StateReady)
 	}
-	if readiness.Components[1].State != StateDegraded {
-		t.Fatalf("Components[1].State = %q, want %q", readiness.Components[1].State, StateDegraded)
+	if readiness.Items[1].State != StateDegraded {
+		t.Fatalf("Items[1].State = %q, want %q", readiness.Items[1].State, StateDegraded)
 	}
-	if readiness.Components[0].Name != "cache" {
-		t.Fatalf("Components[0].Name = %q, want cache", readiness.Components[0].Name)
+	if readiness.Items[0].Name != "cache" {
+		t.Fatalf("Items[0].Name = %q, want cache", readiness.Items[0].Name)
 	}
 }
 
@@ -103,11 +106,11 @@ func TestReadinessFromItemsNotReady(t *testing.T) {
 	if readiness.Ready {
 		t.Fatal("Ready = true, want false")
 	}
-	if readiness.Reason != "one or more readiness items are not ready" {
-		t.Fatalf("Reason = %q, want one or more readiness items are not ready", readiness.Reason)
+	if readiness.Reason != "one or more blocking readiness items are not ready" {
+		t.Fatalf("Reason = %q, want one or more blocking readiness items are not ready", readiness.Reason)
 	}
-	if readiness.Components[0].State != StateNotReady {
-		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateNotReady)
+	if readiness.Items[0].State != StateNotReady {
+		t.Fatalf("Items[0].State = %q, want %q", readiness.Items[0].State, StateNotReady)
 	}
 }
 
@@ -123,140 +126,103 @@ func TestReadinessFromItemsPreservesReason(t *testing.T) {
 	}
 }
 
-func TestReadinessFromPolicyItemsWithNoItems(t *testing.T) {
-	readiness := ReadinessFromPolicyItems("")
-
-	if readiness.Ready {
-		t.Fatal("Ready = true, want false")
-	}
-	if readiness.Reason != "no readiness items" {
-		t.Fatalf("Reason = %q, want no readiness items", readiness.Reason)
-	}
-	if readiness.Components != nil {
-		t.Fatalf("Components = %+v, want nil", readiness.Components)
-	}
-}
-
-func TestReadinessFromPolicyItemsWithNoItemsPreservesReason(t *testing.T) {
-	readiness := ReadinessFromPolicyItems("custom reason")
-
-	if readiness.Ready {
-		t.Fatal("Ready = true, want false")
-	}
-	if readiness.Reason != "custom reason" {
-		t.Fatalf("Reason = %q, want custom reason", readiness.Reason)
-	}
-}
-
-func TestReadinessFromPolicyItemsAllRequiredReady(t *testing.T) {
+func TestReadinessFromItemsAllBlockingReady(t *testing.T) {
 	items := []ReadinessItem{
-		{Name: "database", Policy: ReadinessRequired, Ready: true},
+		{Name: "database", Impact: ReadinessImpactBlocking, Ready: true},
 		{Name: "cache", Ready: true, State: StateDegraded},
 	}
 
-	readiness := ReadinessFromPolicyItems("", items...)
+	readiness := ReadinessFromItems("", items...)
 	items[0].Name = "mutated"
 
 	if !readiness.Ready {
 		t.Fatal("Ready = false, want true")
 	}
-	if readiness.Reason != "all required readiness items ready" {
-		t.Fatalf("Reason = %q, want all required readiness items ready", readiness.Reason)
+	if readiness.Reason != "all blocking readiness items ready" {
+		t.Fatalf("Reason = %q, want all blocking readiness items ready", readiness.Reason)
 	}
-	if readiness.Components[0].Name != "database" {
-		t.Fatalf("Components[0].Name = %q, want database", readiness.Components[0].Name)
+	if readiness.Items[0].Name != "database" {
+		t.Fatalf("Items[0].Name = %q, want database", readiness.Items[0].Name)
 	}
-	if readiness.Components[0].State != StateReady {
-		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateReady)
+	if readiness.Items[0].State != StateReady {
+		t.Fatalf("Items[0].State = %q, want %q", readiness.Items[0].State, StateReady)
 	}
-	if readiness.Components[1].Policy != ReadinessRequired {
-		t.Fatalf("Components[1].Policy = %q, want %q", readiness.Components[1].Policy, ReadinessRequired)
+	if readiness.Items[1].Impact != ReadinessImpactBlocking {
+		t.Fatalf("Items[1].Impact = %q, want %q", readiness.Items[1].Impact, ReadinessImpactBlocking)
 	}
-	if readiness.Components[1].State != StateDegraded {
-		t.Fatalf("Components[1].State = %q, want %q", readiness.Components[1].State, StateDegraded)
+	if readiness.Items[1].State != StateDegraded {
+		t.Fatalf("Items[1].State = %q, want %q", readiness.Items[1].State, StateDegraded)
 	}
 }
 
-func TestReadinessFromPolicyItemsRequiredNotReadyBlocks(t *testing.T) {
-	readiness := ReadinessFromPolicyItems("", ReadinessItem{
+func TestReadinessFromItemsBlockingNotReadyBlocks(t *testing.T) {
+	readiness := ReadinessFromItems("", ReadinessItem{
 		Name:   "database",
-		Policy: ReadinessRequired,
+		Impact: ReadinessImpactBlocking,
 		Ready:  false,
 	})
 
 	if readiness.Ready {
 		t.Fatal("Ready = true, want false")
 	}
-	if readiness.Reason != "one or more required readiness items are not ready" {
-		t.Fatalf("Reason = %q, want one or more required readiness items are not ready", readiness.Reason)
+	if readiness.Reason != "one or more blocking readiness items are not ready" {
+		t.Fatalf("Reason = %q, want one or more blocking readiness items are not ready", readiness.Reason)
 	}
-	if readiness.Components[0].State != StateNotReady {
-		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateNotReady)
+	if readiness.Items[0].State != StateNotReady {
+		t.Fatalf("Items[0].State = %q, want %q", readiness.Items[0].State, StateNotReady)
 	}
 }
 
-func TestReadinessFromPolicyItemsOptionalAndInformationalDoNotBlock(t *testing.T) {
-	readiness := ReadinessFromPolicyItems("",
-		ReadinessItem{Name: "database", Policy: ReadinessRequired, Ready: true},
-		ReadinessItem{Name: "cache", Policy: ReadinessOptional, Ready: false},
-		ReadinessItem{Name: "build", Policy: ReadinessInformational, Ready: false},
+func TestReadinessFromItemsNonBlockingItemsDoNotBlock(t *testing.T) {
+	readiness := ReadinessFromItems("",
+		ReadinessItem{Name: "database", Impact: ReadinessImpactBlocking, Ready: true},
+		ReadinessItem{Name: "cache", Impact: ReadinessImpactNonBlocking, Ready: false},
+		ReadinessItem{Name: "search", Impact: ReadinessImpactNonBlocking, Ready: false},
 	)
 
 	if !readiness.Ready {
 		t.Fatal("Ready = false, want true")
 	}
-	if len(readiness.Components) != 3 {
-		t.Fatalf("Components length = %d, want 3", len(readiness.Components))
+	if len(readiness.Items) != 3 {
+		t.Fatalf("Items length = %d, want 3", len(readiness.Items))
 	}
-	if readiness.Components[1].Policy != ReadinessOptional {
-		t.Fatalf("Components[1].Policy = %q, want %q", readiness.Components[1].Policy, ReadinessOptional)
+	if readiness.Items[1].Impact != ReadinessImpactNonBlocking {
+		t.Fatalf("Items[1].Impact = %q, want %q", readiness.Items[1].Impact, ReadinessImpactNonBlocking)
 	}
-	if readiness.Components[2].Policy != ReadinessInformational {
-		t.Fatalf("Components[2].Policy = %q, want %q", readiness.Components[2].Policy, ReadinessInformational)
+	if readiness.Items[2].Impact != ReadinessImpactNonBlocking {
+		t.Fatalf("Items[2].Impact = %q, want %q", readiness.Items[2].Impact, ReadinessImpactNonBlocking)
 	}
 }
 
-func TestReadinessFromPolicyItemsWithoutRequiredItems(t *testing.T) {
-	readiness := ReadinessFromPolicyItems("",
-		ReadinessItem{Name: "cache", Policy: ReadinessOptional, Ready: true},
-		ReadinessItem{Name: "build", Policy: ReadinessInformational, Ready: true},
+func TestReadinessFromItemsWithoutBlockingItems(t *testing.T) {
+	readiness := ReadinessFromItems("",
+		ReadinessItem{Name: "cache", Impact: ReadinessImpactNonBlocking, Ready: true},
+		ReadinessItem{Name: "search", Impact: ReadinessImpactNonBlocking, Ready: true},
 	)
 
 	if readiness.Ready {
 		t.Fatal("Ready = true, want false")
 	}
-	if readiness.Reason != "no required readiness items" {
-		t.Fatalf("Reason = %q, want no required readiness items", readiness.Reason)
+	if readiness.Reason != "no blocking readiness items" {
+		t.Fatalf("Reason = %q, want no blocking readiness items", readiness.Reason)
 	}
-	if len(readiness.Components) != 2 {
-		t.Fatalf("Components length = %d, want 2", len(readiness.Components))
+	if len(readiness.Items) != 2 {
+		t.Fatalf("Items length = %d, want 2", len(readiness.Items))
 	}
 }
 
-func TestReadinessFromPolicyItemsDefaultsUnknownPolicyToRequired(t *testing.T) {
-	readiness := ReadinessFromPolicyItems("", ReadinessItem{
+func TestReadinessFromItemsDefaultsUnknownImpactToBlocking(t *testing.T) {
+	readiness := ReadinessFromItems("", ReadinessItem{
 		Name:   "database",
-		Policy: ReadinessPolicy("unknown"),
+		Impact: ReadinessImpact("unknown"),
 		Ready:  true,
 	})
 
 	if !readiness.Ready {
 		t.Fatal("Ready = false, want true")
 	}
-	if readiness.Components[0].Policy != ReadinessRequired {
-		t.Fatalf("Components[0].Policy = %q, want %q", readiness.Components[0].Policy, ReadinessRequired)
-	}
-}
-
-func TestReadinessFromPolicyItemsPreservesReason(t *testing.T) {
-	ready := ReadinessFromPolicyItems("custom ready", ReadinessItem{Name: "database", Ready: true})
-	if ready.Reason != "custom ready" {
-		t.Fatalf("ready.Reason = %q, want custom ready", ready.Reason)
-	}
-
-	notReady := ReadinessFromPolicyItems("custom not ready", ReadinessItem{Name: "database", Ready: false})
-	if notReady.Reason != "custom not ready" {
-		t.Fatalf("notReady.Reason = %q, want custom not ready", notReady.Reason)
+	if readiness.Items[0].Impact != ReadinessImpactBlocking {
+		t.Fatalf("Items[0].Impact = %q, want %q", readiness.Items[0].Impact, ReadinessImpactBlocking)
 	}
 }
 
@@ -272,11 +238,11 @@ func TestReadinessFromStatusReady(t *testing.T) {
 	if readiness.Reason != "component ready" {
 		t.Fatalf("Reason = %q, want component ready", readiness.Reason)
 	}
-	if len(readiness.Components) != 1 {
-		t.Fatalf("Components length = %d, want 1", len(readiness.Components))
+	if len(readiness.Items) != 1 {
+		t.Fatalf("Items length = %d, want 1", len(readiness.Items))
 	}
 
-	item := readiness.Components[0]
+	item := readiness.Items[0]
 	if item.Name != "component" {
 		t.Fatalf("Item.Name = %q, want component", item.Name)
 	}
@@ -306,14 +272,14 @@ func TestReadinessFromStatusNotReady(t *testing.T) {
 	if readiness.Reason != "component not ready" {
 		t.Fatalf("Reason = %q, want component not ready", readiness.Reason)
 	}
-	if len(readiness.Components) != 1 {
-		t.Fatalf("Components length = %d, want 1", len(readiness.Components))
+	if len(readiness.Items) != 1 {
+		t.Fatalf("Items length = %d, want 1", len(readiness.Items))
 	}
-	if readiness.Components[0].Ready {
-		t.Fatal("Components[0].Ready = true, want false")
+	if readiness.Items[0].Ready {
+		t.Fatal("Items[0].Ready = true, want false")
 	}
-	if readiness.Components[0].State != StateNotReady {
-		t.Fatalf("Components[0].State = %q, want %q", readiness.Components[0].State, StateNotReady)
+	if readiness.Items[0].State != StateNotReady {
+		t.Fatalf("Items[0].State = %q, want %q", readiness.Items[0].State, StateNotReady)
 	}
 }
 
@@ -338,8 +304,8 @@ func TestReadinessItemFromStatus(t *testing.T) {
 	if item.Message != "degraded" {
 		t.Fatalf("Message = %q, want degraded", item.Message)
 	}
-	if item.Policy != "" {
-		t.Fatalf("Policy = %q, want empty policy", item.Policy)
+	if item.Impact != ReadinessImpactBlocking {
+		t.Fatalf("Impact = %q, want %q", item.Impact, ReadinessImpactBlocking)
 	}
 }
 
@@ -361,45 +327,49 @@ func TestReadinessItemFromStatusDefaultsEmptyStateFromReady(t *testing.T) {
 	}
 }
 
-func TestCloneReadinessItems(t *testing.T) {
-	items := []ReadinessItem{
-		{Name: "component", Kind: "test", Ready: true, State: StateReady},
-	}
-
-	cloned := cloneReadinessItems(items)
-	items[0].Name = "mutated"
-
-	if len(cloned) != 1 {
-		t.Fatalf("cloned length = %d, want 1", len(cloned))
-	}
-	if cloned[0].Name != "component" {
-		t.Fatalf("cloned[0].Name = %q, want component", cloned[0].Name)
-	}
-
-	if got := cloneReadinessItems(nil); got != nil {
-		t.Fatalf("cloneReadinessItems(nil) = %+v, want nil", got)
-	}
-	if got := cloneReadinessItems([]ReadinessItem{}); got != nil {
-		t.Fatalf("cloneReadinessItems(empty) = %+v, want nil", got)
-	}
-}
-
 func TestReadinessJSONOmitEmptyFields(t *testing.T) {
 	requireJSON(t, Readiness{
 		Ready: true,
 	}, `{"ready":true}`)
 }
 
-func TestReadinessItemJSONIncludesPolicy(t *testing.T) {
+func TestSystemReadinessJSONPreservesParentAndChildSemantics(t *testing.T) {
+	requireJSON(t, SystemReadiness{
+		Ready:  true,
+		Reason: "service ready",
+		Components: []ComponentReadiness{
+			{
+				Component: ComponentInfo{Name: "clients", Kind: "client_registry"},
+				Registration: ComponentRegistration{
+					ReadinessPolicy: ReadinessOptional,
+				},
+				Readiness: Readiness{
+					Ready:  false,
+					Reason: "payments unavailable",
+					Items: []ReadinessItem{
+						{
+							Name:   "payments",
+							Impact: ReadinessImpactBlocking,
+							Ready:  false,
+							State:  StateNotReady,
+						},
+					},
+				},
+			},
+		},
+	}, `{"ready":true,"reason":"service ready","components":[{"component":{"name":"clients","kind":"client_registry"},"registration":{"readiness_policy":"optional"},"readiness":{"ready":false,"reason":"payments unavailable","items":[{"name":"payments","impact":"blocking","ready":false,"state":"not_ready"}]}}]}`)
+}
+
+func TestReadinessItemJSONIncludesImpact(t *testing.T) {
 	item := ReadinessItem{
 		Name:    "component",
 		Kind:    "test",
-		Policy:  ReadinessOptional,
+		Impact:  ReadinessImpactNonBlocking,
 		Ready:   false,
 		State:   StateNotReady,
 		Reason:  "dependency unavailable",
 		Message: "cache unavailable",
 	}
 
-	requireJSON(t, item, `{"name":"component","kind":"test","policy":"optional","ready":false,"state":"not_ready","reason":"dependency unavailable","message":"cache unavailable"}`)
+	requireJSON(t, item, `{"name":"component","kind":"test","impact":"non_blocking","ready":false,"state":"not_ready","reason":"dependency unavailable","message":"cache unavailable"}`)
 }
