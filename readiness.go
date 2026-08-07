@@ -90,8 +90,9 @@ func NotReadyReadiness(reason string, items ...ReadinessItem) Readiness {
 
 // ReadinessFromItems builds a readiness result whose aggregate readiness is
 // derived from blocking readiness items. Missing and unknown impacts fail
-// closed as blocking. When no blocking items are supplied, the result is not
-// ready; callers with a different domain rule can construct Readiness directly.
+// closed as blocking. An empty item group is not ready, while a non-empty group
+// containing only explicitly non-blocking items is ready. Callers with another
+// domain rule can construct Readiness directly.
 func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness {
 	normalized := normalizeReadinessItems(items)
 
@@ -123,7 +124,7 @@ func ReadinessFromItems(reason string, items ...ReadinessItem) Readiness {
 			reason = "no blocking readiness items"
 		}
 		return Readiness{
-			Ready:  false,
+			Ready:  true,
 			Reason: reason,
 			Items:  normalized,
 		}

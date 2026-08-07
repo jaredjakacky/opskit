@@ -412,7 +412,10 @@ for blocking or non-blocking domain details. It never overrides registration
 policy. The contributor's aggregate `Readiness.Ready` remains authoritative,
 including when it expresses an invariant that cannot be reconstructed from the
 visible child items. `ReadinessFromItems` is available when blocking child items
-do directly determine that aggregate.
+do directly determine that aggregate. It treats an empty group as not ready,
+but a non-empty group of explicitly non-blocking items as ready. This
+contributor-level rule is intentionally separate from `Registry.Readiness`,
+which fails closed when no required parent components are registered.
 
 ## Inspection Is Safe Diagnostic Detail
 

@@ -194,20 +194,33 @@ func TestReadinessFromItemsNonBlockingItemsDoNotBlock(t *testing.T) {
 	}
 }
 
-func TestReadinessFromItemsWithoutBlockingItems(t *testing.T) {
+func TestReadinessFromItemsWithoutBlockingItemsIsReady(t *testing.T) {
 	readiness := ReadinessFromItems("",
 		ReadinessItem{Name: "cache", Impact: ReadinessImpactNonBlocking, Ready: true},
-		ReadinessItem{Name: "search", Impact: ReadinessImpactNonBlocking, Ready: true},
+		ReadinessItem{Name: "search", Impact: ReadinessImpactNonBlocking, Ready: false},
 	)
 
-	if readiness.Ready {
-		t.Fatal("Ready = true, want false")
+	if !readiness.Ready {
+		t.Fatal("Ready = false, want true")
 	}
 	if readiness.Reason != "no blocking readiness items" {
 		t.Fatalf("Reason = %q, want no blocking readiness items", readiness.Reason)
 	}
 	if len(readiness.Items) != 2 {
 		t.Fatalf("Items length = %d, want 2", len(readiness.Items))
+	}
+}
+
+func TestReadinessFromItemsWithoutBlockingItemsPreservesReason(t *testing.T) {
+	readiness := ReadinessFromItems("optional clients do not block",
+		ReadinessItem{Name: "search", Impact: ReadinessImpactNonBlocking, Ready: false},
+	)
+
+	if !readiness.Ready {
+		t.Fatal("Ready = false, want true")
+	}
+	if readiness.Reason != "optional clients do not block" {
+		t.Fatalf("Reason = %q, want optional clients do not block", readiness.Reason)
 	}
 }
 
