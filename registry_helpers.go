@@ -180,6 +180,8 @@ func panickedReadiness(info ComponentInfo, policy ReadinessPolicy, reason string
 	}
 }
 
+// The safeComponent helpers recover component panics only. Their Registry
+// callers enforce the context acceptance boundary after each helper returns.
 func safeComponentStatus(component Component, ctx context.Context) (status Status, panicked bool) {
 	defer func() {
 		if recover() != nil {
@@ -282,6 +284,13 @@ func canceledReadinessItem(err error) ReadinessItem {
 		Reason:  "readiness evaluation canceled",
 		Message: message,
 	}
+}
+
+func canceledRegistryReadiness(readiness Readiness, err error) Readiness {
+	readiness.Ready = false
+	readiness.Reason = "readiness evaluation canceled"
+	readiness.Components = append(readiness.Components, canceledReadinessItem(err))
+	return readiness
 }
 
 // contextFailureMessage deliberately classifies rather than formats err. The

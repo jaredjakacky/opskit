@@ -18,7 +18,10 @@ import (
 //
 // Registry read methods call component methods synchronously, so callers that
 // expose registry data through probes or admin endpoints should pass bounded
-// contexts.
+// contexts. Registry cannot interrupt a component that ignores cancellation.
+// After each component call returns, Registry rejects that call's result if the
+// context has expired, and it checks the context again before accepting the
+// aggregate result.
 //
 // Registry methods are safe for concurrent use. Component methods may also be
 // called concurrently through registry read paths, so component implementations
@@ -179,9 +182,11 @@ func (r *Registry) Entries() []ComponentEntry {
 //
 // Status calls each component's Status method synchronously. Use a context with
 // an appropriate deadline when serving request paths. If evaluation is
-// canceled, Status returns a synthetic opskit.registry entry that describes the
-// cancellation. If a component status method panics, Status recovers and
-// returns an unknown status for that component without exposing the panic value.
+// canceled before or during evaluation, Status discards any component result
+// that crossed the cancellation boundary and returns a synthetic
+// opskit.registry entry after any earlier accepted entries. If a component
+// status method panics, Status recovers and returns an unknown status for that
+// component without exposing the panic value.
 func (r *Registry) Status(ctx context.Context) SystemStatus {
 	ctx = normalizeContext(ctx)
 
@@ -189,6 +194,10 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 
 	system := SystemStatus{
 		Components: make([]ComponentStatus, 0, len(registrations)),
+	}
+	if err := ctx.Err(); err != nil {
+		system.Components = append(system.Components, canceledComponentStatus(err))
+		return system
 	}
 
 	for _, reg := range registrations {
@@ -199,6 +208,10 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 
 		component := reg.component
 		status, _ := safeComponentStatus(component, ctx)
+		if err := ctx.Err(); err != nil {
+			system.Components = append(system.Components, canceledComponentStatus(err))
+			return system
+		}
 
 		system.Components = append(system.Components, ComponentStatus{
 			Component: reg.info,
@@ -208,6 +221,9 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 			Capabilities: capabilitiesOf(component),
 			Status:       status,
 		})
+	}
+	if err := ctx.Err(); err != nil {
+		system.Components = append(system.Components, canceledComponentStatus(err))
 	}
 
 	return system
@@ -221,10 +237,11 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 //
 // Readiness calls readiness contributors and component status methods
 // synchronously. Use a context with an appropriate deadline for probe paths. If
-// evaluation is canceled, Readiness includes a synthetic opskit.registry item
-// that describes the cancellation. If a component readiness or status method
-// panics, Readiness recovers and returns an unknown not-ready item without
-// exposing the panic value.
+// evaluation is canceled before or during evaluation, Readiness discards any
+// component result that crossed the cancellation boundary and includes a
+// synthetic opskit.registry item after any earlier accepted items. If a
+// component readiness or status method panics, Readiness recovers and returns
+// an unknown not-ready item without exposing the panic value.
 func (r *Registry) Readiness(ctx context.Context) Readiness {
 	ctx = normalizeContext(ctx)
 
@@ -234,15 +251,15 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 		Ready:      true,
 		Components: make([]ReadinessItem, 0, len(registrations)),
 	}
+	if err := ctx.Err(); err != nil {
+		return canceledRegistryReadiness(readiness, err)
+	}
 
 	required := 0
 
 	for _, reg := range registrations {
 		if err := ctx.Err(); err != nil {
-			readiness.Ready = false
-			readiness.Reason = "readiness evaluation canceled"
-			readiness.Components = append(readiness.Components, canceledReadinessItem(err))
-			return readiness
+			return canceledRegistryReadiness(readiness, err)
 		}
 
 		if !participatesInReadiness(reg.readinessPolicy) {
@@ -253,6 +270,9 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 
 		if contributor, ok := component.(ReadinessContributor); ok {
 			componentReadiness, _ := safeComponentReadiness(contributor, ctx, reg.info, reg.readinessPolicy)
+			if err := ctx.Err(); err != nil {
+				return canceledRegistryReadiness(readiness, err)
+			}
 
 			if blocksReadiness(reg.readinessPolicy) {
 				required++
@@ -267,6 +287,9 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 		}
 
 		status, panicked := safeComponentStatus(component, ctx)
+		if err := ctx.Err(); err != nil {
+			return canceledRegistryReadiness(readiness, err)
+		}
 		componentReadiness := readinessFromStatusWithPolicy(reg.info, status, reg.readinessPolicy)
 		if panicked {
 			componentReadiness = panickedReadiness(reg.info, reg.readinessPolicy, componentStatusPanicMessage)
@@ -286,13 +309,13 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 	if required == 0 {
 		readiness.Ready = false
 		readiness.Reason = "no required readiness components registered"
-		return readiness
-	}
-
-	if readiness.Ready {
+	} else if readiness.Ready {
 		readiness.Reason = "all readiness components ready"
 	} else {
 		readiness.Reason = "one or more readiness components are not ready"
+	}
+	if err := ctx.Err(); err != nil {
+		return canceledRegistryReadiness(readiness, err)
 	}
 
 	return readiness
@@ -302,9 +325,12 @@ func (r *Registry) Readiness(ctx context.Context) Readiness {
 //
 // Snapshot calls component status, readiness, and inspection methods
 // synchronously when those capabilities are available. Use a context with an
-// appropriate deadline when serving admin request paths. If a component method
-// panics, Snapshot recovers and returns partial safe operational data without
-// exposing the panic value.
+// appropriate deadline when serving admin request paths. If the context expires
+// during any component call or before final result acceptance, Snapshot returns
+// a zero snapshot and the context error. That context error takes precedence
+// over component data, errors, and recovered panics. If a component method
+// panics while the context remains active, Snapshot recovers and returns partial
+// safe operational data without exposing the panic value.
 func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot, error) {
 	ctx = normalizeContext(ctx)
 
@@ -352,15 +378,18 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 
 	if inspector, ok := component.(Inspector); ok {
 		inspection, err, panicked := safeComponentInspection(inspector, ctx)
-		if panicked {
-			snapshot.InspectionFailure = componentInspectionFailure()
-			return snapshot, nil
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ComponentSnapshot{}, ctxErr
 		}
-		if err != nil {
+		if panicked || err != nil {
 			snapshot.InspectionFailure = componentInspectionFailure()
-			return snapshot, nil
+		} else {
+			snapshot.Inspection = &inspection
 		}
-		snapshot.Inspection = &inspection
+	}
+
+	if err := ctx.Err(); err != nil {
+		return ComponentSnapshot{}, err
 	}
 
 	return snapshot, nil
@@ -373,8 +402,11 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 // error is a private diagnostic/control-flow channel: it may contain arbitrary
 // text and must not be copied into an operational response or log without an
 // application-owned presentation policy. Registry.Snapshot uses a generic
-// public failure instead. If the inspector panics, Inspect recovers and returns
-// ErrComponentPanicked without exposing the panic value.
+// public failure instead. If the call returns after the context expires,
+// Inspect returns a zero inspection and the context error, which takes
+// precedence over the inspector result, error, or recovered panic. If the
+// inspector panics while the context remains active, Inspect recovers and
+// returns ErrComponentPanicked without exposing the panic value.
 func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error) {
 	ctx = normalizeContext(ctx)
 
@@ -393,6 +425,9 @@ func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error)
 	}
 
 	inspection, err, _ := safeComponentInspection(inspector, ctx)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return Inspection{}, ctxErr
+	}
 	return inspection, err
 }
 
@@ -431,7 +466,10 @@ func (r *Registry) CheckDescriber(name string) (CheckDescriber, error) {
 	return describer, nil
 }
 
-// Checks returns passive check metadata for one registered component.
+// Checks returns passive check metadata for one registered component. If the
+// context expires during the component call or result cloning, Checks returns a
+// nil result and the context error. The context error takes precedence over the
+// component result or a recovered panic.
 func (r *Registry) Checks(ctx context.Context, name string) ([]CheckDescriptor, error) {
 	ctx = normalizeContext(ctx)
 
@@ -450,11 +488,19 @@ func (r *Registry) Checks(ctx context.Context, name string) ([]CheckDescriptor, 
 	}
 
 	checks, err, _ := safeComponentChecks(describer, ctx)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	return cloneCheckDescriptors(checks), nil
+	cloned := cloneCheckDescriptors(checks)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	return cloned, nil
 }
 
 // CheckGroup returns a registered component as a CheckGroup.
@@ -513,7 +559,10 @@ func (r *Registry) CommandDescriber(name string) (CommandDescriber, error) {
 	return describer, nil
 }
 
-// Commands returns passive command metadata for one registered component.
+// Commands returns passive command metadata for one registered component. If
+// the context expires during the component call or result cloning, Commands
+// returns a nil result and the context error. The context error takes precedence
+// over the component result or a recovered panic.
 func (r *Registry) Commands(ctx context.Context, name string) ([]CommandDescriptor, error) {
 	ctx = normalizeContext(ctx)
 
@@ -532,9 +581,17 @@ func (r *Registry) Commands(ctx context.Context, name string) ([]CommandDescript
 	}
 
 	commands, err, _ := safeComponentCommands(describer, ctx)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	return cloneCommandDescriptors(commands), nil
+	cloned := cloneCommandDescriptors(commands)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	return cloned, nil
 }

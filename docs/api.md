@@ -462,9 +462,21 @@ calls still return the original error to their internal caller.
 If inspection panics while building a snapshot, `inspection_failure` is also
 generic and the panic value is not exposed.
 
-`Registry` methods normalize nil contexts to `context.Background()`. Methods
-that evaluate components synchronously respect canceled contexts. For request
+`Registry` methods normalize nil contexts to `context.Background()`. For request
 paths, probes, and admin endpoints, pass bounded contexts.
+
+Registry calls descriptive component methods synchronously and does not start
+goroutines to enforce deadlines. It therefore cannot interrupt a component that
+ignores cancellation. Once the component returns, Registry checks `ctx.Err()`
+before accepting its result and checks again after result aggregation or
+cloning. A component result that crosses the cancellation boundary is rejected.
+
+For `Snapshot`, `Inspect`, `Checks`, and `Commands`, expiration returns a zero or
+nil result with the context error. The context error takes precedence over
+component data, a component error, or a recovered panic. An inspector returning
+`context.Canceled` or `context.DeadlineExceeded` while the supplied context is
+still active remains an ordinary inspector failure; only `ctx.Err()` determines
+whether the Registry read itself expired.
 
 ### Registry Errors
 
@@ -488,8 +500,10 @@ var (
 ```
 
 `Status` and `Readiness` do not return errors. If evaluation is canceled before
-component calls begin, they return a synthetic `opskit.registry` item describing
-the cancellation.
+or during component calls, they retain results accepted before cancellation,
+discard the result of any callback that crossed the cancellation boundary, and
+append a synthetic `opskit.registry` item describing the cancellation. This also
+applies to empty registries and cancellation detected during final aggregation.
 
 ## Capabilities
 
