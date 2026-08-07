@@ -388,8 +388,8 @@ sequenceDiagram
         Registry->>Registry: derive readiness from Status.Ready
       end
 
-      Registry->>Registry: fill missing child item policy from registration policy
-      Registry->>Registry: registration policy decides whether component blocks aggregate Ready
+      Registry->>Registry: preserve parent identity, policy, aggregate result, and child items
+      Registry->>Registry: parent registration policy decides whether component blocks aggregate Ready
     end
   end
 
@@ -400,16 +400,19 @@ The registry aggregates readiness. It does not perform health checks. Expensive
 health checks should be run elsewhere and stored as local component state before
 readiness is evaluated.
 
-When a readiness contributor returns child readiness items, Opskit preserves any
-explicit child item policy. If a child item omits policy, Opskit fills it from
-the component's registration policy.
+Registry output has two semantic levels, not an arbitrary tree. Each registered
+component gets one envelope containing its identity, registration policy, and
+component-owned `Readiness`. Any child `ReadinessItem` values remain scoped to
+that parent, so equal child names in different registries are unambiguous and a
+contributor's aggregate reason is not discarded.
 
-Contributor-owned child item policy is separate from registry-level registration
-policy. Registration policy decides whether a registered component blocks
-service readiness. Child item policy helps a contributor compute its own
-aggregate readiness when it represents a group, such as clients or dependencies
-where some children are required and others are optional. Use
-`ReadinessFromPolicyItems` for that contributor-side aggregation.
+Registration `ReadinessPolicy` decides whether the parent blocks service
+readiness. Child `ReadinessImpact` is a separate contributor-owned vocabulary
+for blocking or non-blocking domain details. It never overrides registration
+policy. The contributor's aggregate `Readiness.Ready` remains authoritative,
+including when it expresses an invariant that cannot be reconstructed from the
+visible child items. `ReadinessFromItems` is available when blocking child items
+do directly determine that aggregate.
 
 ## Inspection Is Safe Diagnostic Detail
 

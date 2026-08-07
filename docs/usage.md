@@ -116,6 +116,12 @@ components are omitted from readiness entirely.
 If a component implements `ReadinessContributor`, the registry uses that
 readiness result. Otherwise, the registry derives readiness from `Status.Ready`.
 
+The aggregate preserves one envelope per registered component. That envelope
+contains the parent identity, registration policy, contributor aggregate reason
+and decision, and optional child items. Child item names are scoped to their
+parent, and their blocking impact does not override the parent's registry
+policy.
+
 If no required readiness components are registered, the aggregate readiness is
 not ready. That fail-closed behavior prevents a service from accidentally
 becoming ready with only optional or informational components.

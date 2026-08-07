@@ -122,56 +122,30 @@ func blocksReadiness(policy ReadinessPolicy) bool {
 	return normalizeReadinessPolicy(policy) == ReadinessRequired
 }
 
-func readinessItemFromReadiness(info ComponentInfo, readiness Readiness, policy ReadinessPolicy) []ReadinessItem {
-	if len(readiness.Components) == 0 {
-		return []ReadinessItem{
-			{
-				Name:   info.Name,
-				Kind:   info.Kind,
-				Policy: policy,
-				Ready:  readiness.Ready,
-				State:  stateFromReady(readiness.Ready),
-				Reason: readiness.Reason,
-			},
-		}
-	}
-
-	items := make([]ReadinessItem, 0, len(readiness.Components))
-	for _, item := range readiness.Components {
-		item.State = normalizeReadinessItemState(item.Ready, item.State)
-		if item.Name == "" {
-			item.Name = info.Name
-		}
-		if item.Kind == "" {
-			item.Kind = info.Kind
-		}
-		if item.Policy == "" {
-			item.Policy = policy
-		}
-		items = append(items, item)
-	}
-
-	return items
-}
-
-func readinessWithPolicy(info ComponentInfo, readiness Readiness, policy ReadinessPolicy) Readiness {
-	readiness.Components = readinessItemFromReadiness(info, readiness, policy)
+func normalizeReadiness(readiness Readiness) Readiness {
+	readiness.Items = normalizeReadinessItems(readiness.Items)
 	return readiness
 }
 
-func readinessFromStatusWithPolicy(info ComponentInfo, status Status, policy ReadinessPolicy) Readiness {
-	return readinessWithPolicy(info, ReadinessFromStatus(info, status), policy)
+func componentReadiness(info ComponentInfo, policy ReadinessPolicy, readiness Readiness) ComponentReadiness {
+	return ComponentReadiness{
+		Component: info,
+		Registration: ComponentRegistration{
+			ReadinessPolicy: policy,
+		},
+		Readiness: normalizeReadiness(readiness),
+	}
 }
 
-func panickedReadiness(info ComponentInfo, policy ReadinessPolicy, reason string) Readiness {
+func panickedReadiness(info ComponentInfo, reason string) Readiness {
 	return Readiness{
 		Ready:  false,
 		Reason: reason,
-		Components: []ReadinessItem{
+		Items: []ReadinessItem{
 			{
 				Name:   info.Name,
 				Kind:   info.Kind,
-				Policy: policy,
+				Impact: ReadinessImpactBlocking,
 				Ready:  false,
 				State:  StateUnknown,
 				Reason: reason,
@@ -193,15 +167,15 @@ func safeComponentStatus(component Component, ctx context.Context) (status Statu
 	return component.Status(ctx), false
 }
 
-func safeComponentReadiness(contributor ReadinessContributor, ctx context.Context, info ComponentInfo, policy ReadinessPolicy) (readiness Readiness, panicked bool) {
+func safeComponentReadiness(contributor ReadinessContributor, ctx context.Context, info ComponentInfo) (readiness Readiness, panicked bool) {
 	defer func() {
 		if recover() != nil {
-			readiness = panickedReadiness(info, policy, componentReadinessPanicMessage)
+			readiness = panickedReadiness(info, componentReadinessPanicMessage)
 			panicked = true
 		}
 	}()
 
-	return readinessWithPolicy(info, contributor.Readiness(ctx), policy), false
+	return normalizeReadiness(contributor.Readiness(ctx)), false
 }
 
 func safeComponentInspection(inspector Inspector, ctx context.Context) (inspection Inspection, err error, panicked bool) {
@@ -279,6 +253,7 @@ func canceledReadinessItem(err error) ReadinessItem {
 	return ReadinessItem{
 		Name:    "opskit.registry",
 		Kind:    "opskit",
+		Impact:  ReadinessImpactBlocking,
 		Ready:   false,
 		State:   StateUnknown,
 		Reason:  "readiness evaluation canceled",
@@ -286,10 +261,23 @@ func canceledReadinessItem(err error) ReadinessItem {
 	}
 }
 
-func canceledRegistryReadiness(readiness Readiness, err error) Readiness {
+func canceledRegistryReadiness(readiness SystemReadiness, err error) SystemReadiness {
 	readiness.Ready = false
 	readiness.Reason = "readiness evaluation canceled"
-	readiness.Components = append(readiness.Components, canceledReadinessItem(err))
+	readiness.Components = append(readiness.Components, ComponentReadiness{
+		Component: ComponentInfo{
+			Name: "opskit.registry",
+			Kind: "opskit",
+		},
+		Registration: ComponentRegistration{
+			ReadinessPolicy: ReadinessRequired,
+		},
+		Readiness: Readiness{
+			Ready:  false,
+			Reason: "readiness evaluation canceled",
+			Items:  []ReadinessItem{canceledReadinessItem(err)},
+		},
+	})
 	return readiness
 }
 

@@ -226,64 +226,55 @@ func TestBlocksReadiness(t *testing.T) {
 	}
 }
 
-func TestReadinessItemFromReadinessFallback(t *testing.T) {
-	items := readinessItemFromReadiness(
+func TestComponentReadinessPreservesParentAndReport(t *testing.T) {
+	got := componentReadiness(
 		ComponentInfo{Name: "component", Kind: "test"},
-		NotReadyReadiness("not ready"),
 		ReadinessRequired,
+		NotReadyReadiness("not ready"),
 	)
 
-	if len(items) != 1 {
-		t.Fatalf("items length = %d, want 1", len(items))
+	if got.Component.Name != "component" || got.Component.Kind != "test" {
+		t.Fatalf("component = %#v, want registered identity", got.Component)
 	}
-	item := items[0]
-	if item.Name != "component" {
-		t.Fatalf("Name = %q, want component", item.Name)
+	if got.Registration.ReadinessPolicy != ReadinessRequired {
+		t.Fatalf("registration policy = %q, want %q", got.Registration.ReadinessPolicy, ReadinessRequired)
 	}
-	if item.Kind != "test" {
-		t.Fatalf("Kind = %q, want test", item.Kind)
+	if got.Readiness.Ready || got.Readiness.Reason != "not ready" {
+		t.Fatalf("readiness = %#v, want contributor result", got.Readiness)
 	}
-	if item.Policy != ReadinessRequired {
-		t.Fatalf("Policy = %q, want %q", item.Policy, ReadinessRequired)
-	}
-	if item.Ready {
-		t.Fatal("Ready = true, want false")
-	}
-	if item.State != StateNotReady {
-		t.Fatalf("State = %q, want %q", item.State, StateNotReady)
-	}
-	if item.Reason != "not ready" {
-		t.Fatalf("Reason = %q, want not ready", item.Reason)
+	if got.Readiness.Items != nil {
+		t.Fatalf("readiness items = %#v, want nil without synthesized parent item", got.Readiness.Items)
 	}
 }
 
-func TestReadinessItemFromReadinessNormalizesContributorItems(t *testing.T) {
+func TestComponentReadinessNormalizesItemsWithoutInjectingParentFields(t *testing.T) {
 	input := Readiness{
 		Ready:  true,
 		Reason: "ready",
-		Components: []ReadinessItem{
+		Items: []ReadinessItem{
 			{Ready: true},
-			{Name: "child", Kind: "dependency", Ready: false, State: StateFailed, Policy: ReadinessRequired},
+			{Name: "child", Kind: "dependency", Impact: ReadinessImpactNonBlocking, Ready: false, State: StateFailed},
 		},
 	}
 
-	items := readinessItemFromReadiness(
+	got := componentReadiness(
 		ComponentInfo{Name: "component", Kind: "test"},
-		input,
 		ReadinessOptional,
+		input,
 	)
+	items := got.Readiness.Items
 
 	if len(items) != 2 {
 		t.Fatalf("items length = %d, want 2", len(items))
 	}
-	if items[0].Name != "component" {
-		t.Fatalf("items[0].Name = %q, want component", items[0].Name)
+	if items[0].Name != "" {
+		t.Fatalf("items[0].Name = %q, want empty child name preserved", items[0].Name)
 	}
-	if items[0].Kind != "test" {
-		t.Fatalf("items[0].Kind = %q, want test", items[0].Kind)
+	if items[0].Kind != "" {
+		t.Fatalf("items[0].Kind = %q, want empty child kind preserved", items[0].Kind)
 	}
-	if items[0].Policy != ReadinessOptional {
-		t.Fatalf("items[0].Policy = %q, want %q", items[0].Policy, ReadinessOptional)
+	if items[0].Impact != ReadinessImpactBlocking {
+		t.Fatalf("items[0].Impact = %q, want %q", items[0].Impact, ReadinessImpactBlocking)
 	}
 	if items[0].State != StateReady {
 		t.Fatalf("items[0].State = %q, want %q", items[0].State, StateReady)
@@ -294,14 +285,14 @@ func TestReadinessItemFromReadinessNormalizesContributorItems(t *testing.T) {
 	if items[1].Kind != "dependency" {
 		t.Fatalf("items[1].Kind = %q, want dependency", items[1].Kind)
 	}
-	if items[1].Policy != ReadinessRequired {
-		t.Fatalf("items[1].Policy = %q, want %q", items[1].Policy, ReadinessRequired)
+	if items[1].Impact != ReadinessImpactNonBlocking {
+		t.Fatalf("items[1].Impact = %q, want %q", items[1].Impact, ReadinessImpactNonBlocking)
 	}
 	if items[1].State != StateFailed {
 		t.Fatalf("items[1].State = %q, want %q", items[1].State, StateFailed)
 	}
-	if input.Components[1].Policy != ReadinessRequired {
-		t.Fatalf("input component policy mutated to %q, want %q", input.Components[1].Policy, ReadinessRequired)
+	if input.Items[0].Impact != "" {
+		t.Fatalf("input item impact mutated to %q, want empty", input.Items[0].Impact)
 	}
 }
 

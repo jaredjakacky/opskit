@@ -89,15 +89,31 @@ small:
 ```json
 {
   "ready": true,
-  "reason": "all readiness components ready",
+  "reason": "all required readiness components ready",
   "components": [
     {
-      "name": "config",
-      "kind": "config",
-      "policy": "required",
-      "ready": true,
-      "state": "ready",
-      "message": "configuration loaded"
+      "component": {
+        "name": "config",
+        "kind": "config",
+        "description": "application configuration"
+      },
+      "registration": {
+        "readiness_policy": "required"
+      },
+      "readiness": {
+        "ready": true,
+        "reason": "component ready",
+        "items": [
+          {
+            "name": "config",
+            "kind": "config",
+            "impact": "blocking",
+            "ready": true,
+            "state": "ready",
+            "message": "configuration loaded"
+          }
+        ]
+      }
     }
   ]
 }

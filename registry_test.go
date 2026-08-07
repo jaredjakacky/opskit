@@ -294,8 +294,8 @@ func TestRegistryReadinessCanceledContext(t *testing.T) {
 	if len(readiness.Components) != 1 {
 		t.Fatalf("Readiness.Components length = %d, want 1", len(readiness.Components))
 	}
-	if got := readiness.Components[0].Name; got != "opskit.registry" {
-		t.Fatalf("Readiness.Components[0].Name = %q, want opskit.registry", got)
+	if got := readiness.Components[0].Component.Name; got != "opskit.registry" {
+		t.Fatalf("Readiness.Components[0].Component.Name = %q, want opskit.registry", got)
 	}
 }
 
@@ -324,27 +324,32 @@ func TestRegistryReadinessRecoversComponentPanic(t *testing.T) {
 	if readiness.Ready {
 		t.Fatal("Readiness.Ready = true, want false")
 	}
-	if readiness.Reason != "one or more readiness components are not ready" {
-		t.Fatalf("Readiness.Reason = %q, want one or more readiness components are not ready", readiness.Reason)
+	if readiness.Reason != "one or more required readiness components are not ready" {
+		t.Fatalf("Readiness.Reason = %q, want one or more required readiness components are not ready", readiness.Reason)
 	}
 	if len(readiness.Components) != 2 {
 		t.Fatalf("Readiness.Components length = %d, want 2", len(readiness.Components))
 	}
-	if got := readiness.Components[0].State; got != StateUnknown {
+	if got := readiness.Components[0].Readiness.Items[0].State; got != StateUnknown {
 		t.Fatalf("required readiness state = %q, want %q", got, StateUnknown)
 	}
-	if got := readiness.Components[0].Reason; got != componentReadinessPanicMessage {
+	if got := readiness.Components[0].Readiness.Reason; got != componentReadinessPanicMessage {
 		t.Fatalf("required readiness reason = %q, want %q", got, componentReadinessPanicMessage)
 	}
-	if got := readiness.Components[1].State; got != StateUnknown {
+	if got := readiness.Components[1].Readiness.Items[0].State; got != StateUnknown {
 		t.Fatalf("optional readiness state = %q, want %q", got, StateUnknown)
 	}
-	if got := readiness.Components[1].Reason; got != componentStatusPanicMessage {
+	if got := readiness.Components[1].Readiness.Reason; got != componentStatusPanicMessage {
 		t.Fatalf("optional readiness reason = %q, want %q", got, componentStatusPanicMessage)
 	}
-	for _, item := range readiness.Components {
-		if strings.Contains(item.Reason, "secret") || strings.Contains(item.Message, "secret") {
-			t.Fatalf("panic value exposed in readiness item %+v", item)
+	for _, component := range readiness.Components {
+		if strings.Contains(component.Readiness.Reason, "secret") {
+			t.Fatalf("panic value exposed in component readiness %+v", component)
+		}
+		for _, item := range component.Readiness.Items {
+			if strings.Contains(item.Reason, "secret") || strings.Contains(item.Message, "secret") {
+				t.Fatalf("panic value exposed in readiness item %+v", item)
+			}
 		}
 	}
 }
@@ -376,11 +381,11 @@ func TestRegistryReadinessOptionalPanicDoesNotBlockRequiredReadiness(t *testing.
 	if len(readiness.Components) != 2 {
 		t.Fatalf("Readiness.Components length = %d, want 2", len(readiness.Components))
 	}
-	if readiness.Components[1].Policy != ReadinessOptional {
-		t.Fatalf("optional policy = %q, want %q", readiness.Components[1].Policy, ReadinessOptional)
+	if readiness.Components[1].Registration.ReadinessPolicy != ReadinessOptional {
+		t.Fatalf("optional policy = %q, want %q", readiness.Components[1].Registration.ReadinessPolicy, ReadinessOptional)
 	}
-	if readiness.Components[1].Ready {
-		t.Fatal("optional readiness item ready = true, want false")
+	if readiness.Components[1].Readiness.Ready {
+		t.Fatal("optional component readiness = true, want false")
 	}
 }
 
@@ -417,23 +422,29 @@ func TestRegistryReadinessPolicies(t *testing.T) {
 	if !readiness.Ready {
 		t.Fatalf("Readiness.Ready = false, want true")
 	}
+	if readiness.Reason != "all required readiness components ready" {
+		t.Fatalf("Readiness.Reason = %q, want all required readiness components ready", readiness.Reason)
+	}
 	if len(readiness.Components) != 2 {
 		t.Fatalf("Readiness.Components length = %d, want 2", len(readiness.Components))
 	}
-	if readiness.Components[0].Name != "required" {
-		t.Fatalf("Readiness.Components[0].Name = %q, want required", readiness.Components[0].Name)
+	if readiness.Components[0].Component.Name != "required" {
+		t.Fatalf("Readiness.Components[0].Component.Name = %q, want required", readiness.Components[0].Component.Name)
 	}
-	if readiness.Components[0].Policy != ReadinessRequired {
-		t.Fatalf("Readiness.Components[0].Policy = %q, want %q", readiness.Components[0].Policy, ReadinessRequired)
+	if readiness.Components[0].Registration.ReadinessPolicy != ReadinessRequired {
+		t.Fatalf("Readiness.Components[0] policy = %q, want %q", readiness.Components[0].Registration.ReadinessPolicy, ReadinessRequired)
 	}
-	if readiness.Components[1].Name != "optional" {
-		t.Fatalf("Readiness.Components[1].Name = %q, want optional", readiness.Components[1].Name)
+	if readiness.Components[0].Readiness.Reason != "required ready" {
+		t.Fatalf("Readiness.Components[0] reason = %q, want required ready", readiness.Components[0].Readiness.Reason)
 	}
-	if readiness.Components[1].Policy != ReadinessOptional {
-		t.Fatalf("Readiness.Components[1].Policy = %q, want %q", readiness.Components[1].Policy, ReadinessOptional)
+	if readiness.Components[1].Component.Name != "optional" {
+		t.Fatalf("Readiness.Components[1].Component.Name = %q, want optional", readiness.Components[1].Component.Name)
 	}
-	if readiness.Components[1].Ready {
-		t.Fatal("Readiness.Components[1].Ready = true, want false")
+	if readiness.Components[1].Registration.ReadinessPolicy != ReadinessOptional {
+		t.Fatalf("Readiness.Components[1] policy = %q, want %q", readiness.Components[1].Registration.ReadinessPolicy, ReadinessOptional)
+	}
+	if readiness.Components[1].Readiness.Ready {
+		t.Fatal("Readiness.Components[1].Readiness.Ready = true, want false")
 	}
 
 	status := registry.Status(ctx)
@@ -454,7 +465,7 @@ func TestRegistryReadinessPolicies(t *testing.T) {
 	}
 }
 
-func TestRegistryReadinessSetsPolicyOnContributorItems(t *testing.T) {
+func TestRegistryReadinessSeparatesParentPolicyFromChildImpact(t *testing.T) {
 	ctx := context.Background()
 	registry := NewRegistry()
 
@@ -476,14 +487,126 @@ func TestRegistryReadinessSetsPolicyOnContributorItems(t *testing.T) {
 	if len(readiness.Components) != 1 {
 		t.Fatalf("Readiness.Components length = %d, want 1", len(readiness.Components))
 	}
-	if readiness.Components[0].Name != "dependency" {
-		t.Fatalf("Readiness.Components[0].Name = %q, want dependency", readiness.Components[0].Name)
+	componentReadiness := readiness.Components[0]
+	if componentReadiness.Component.Name != "component" || componentReadiness.Component.Kind != "test" {
+		t.Fatalf("component identity = %#v, want registered parent", componentReadiness.Component)
 	}
-	if readiness.Components[0].Kind != "test" {
-		t.Fatalf("Readiness.Components[0].Kind = %q, want test", readiness.Components[0].Kind)
+	if componentReadiness.Registration.ReadinessPolicy != ReadinessOptional {
+		t.Fatalf("parent policy = %q, want %q", componentReadiness.Registration.ReadinessPolicy, ReadinessOptional)
 	}
-	if readiness.Components[0].Policy != ReadinessOptional {
-		t.Fatalf("Readiness.Components[0].Policy = %q, want %q", readiness.Components[0].Policy, ReadinessOptional)
+	if len(componentReadiness.Readiness.Items) != 1 {
+		t.Fatalf("child item count = %d, want 1", len(componentReadiness.Readiness.Items))
+	}
+	item := componentReadiness.Readiness.Items[0]
+	if item.Name != "dependency" || item.Kind != "" {
+		t.Fatalf("child identity = %#v, want contributor-owned name without injected parent kind", item)
+	}
+	if item.Impact != ReadinessImpactBlocking {
+		t.Fatalf("child impact = %q, want %q", item.Impact, ReadinessImpactBlocking)
+	}
+}
+
+func TestRegistryReadinessPreservesDuplicateChildNamesUnderParents(t *testing.T) {
+	registry := NewRegistry()
+	for _, component := range []*testReadinessComponent{
+		{
+			info:   ComponentInfo{Name: "clients", Kind: "client_registry"},
+			status: ReadyStatus("ready"),
+			readiness: ReadyReadiness("clients ready", ReadinessItem{
+				Name: "payments", Ready: true, State: StateReady,
+			}),
+		},
+		{
+			info:   ComponentInfo{Name: "dependencies", Kind: "dependency_registry"},
+			status: ReadyStatus("ready"),
+			readiness: ReadyReadiness("dependencies ready", ReadinessItem{
+				Name: "payments", Ready: true, State: StateReady,
+			}),
+		},
+	} {
+		if err := registry.Register(component); err != nil {
+			t.Fatalf("Register(%q) error = %v", component.info.Name, err)
+		}
+	}
+
+	readiness := registry.Readiness(context.Background())
+	if len(readiness.Components) != 2 {
+		t.Fatalf("component count = %d, want 2", len(readiness.Components))
+	}
+	for i, wantParent := range []string{"clients", "dependencies"} {
+		component := readiness.Components[i]
+		if component.Component.Name != wantParent {
+			t.Fatalf("component %d parent = %q, want %q", i, component.Component.Name, wantParent)
+		}
+		if len(component.Readiness.Items) != 1 || component.Readiness.Items[0].Name != "payments" {
+			t.Fatalf("component %d child items = %#v, want scoped payments item", i, component.Readiness.Items)
+		}
+	}
+}
+
+func TestRegistryReadinessTrustsContributorAggregateInvariant(t *testing.T) {
+	registry := NewRegistry()
+	component := &testReadinessComponent{
+		info:   ComponentInfo{Name: "dependencies", Kind: "dependency_registry"},
+		status: ReadyStatus("status ready"),
+		readiness: NotReadyReadiness("aggregate quorum is not satisfied", ReadinessItem{
+			Name: "payments", Ready: true, State: StateReady,
+		}),
+	}
+	if err := registry.Register(component); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	readiness := registry.Readiness(context.Background())
+	if readiness.Ready {
+		t.Fatal("system readiness = true, want false from contributor aggregate")
+	}
+	got := readiness.Components[0].Readiness
+	if got.Ready || got.Reason != "aggregate quorum is not satisfied" {
+		t.Fatalf("component readiness = %#v, want false with contributor reason", got)
+	}
+	if len(got.Items) != 1 || !got.Items[0].Ready {
+		t.Fatalf("component items = %#v, want individually ready child", got.Items)
+	}
+}
+
+func TestRegistryReadinessOptionalParentContainsBlockingChildWithoutBlockingSystem(t *testing.T) {
+	registry := NewRegistry()
+	required := &testReadinessComponent{
+		info:      ComponentInfo{Name: "config", Kind: "config"},
+		status:    ReadyStatus("ready"),
+		readiness: ReadyReadiness("config ready"),
+	}
+	optional := &testReadinessComponent{
+		info:   ComponentInfo{Name: "clients", Kind: "client_registry"},
+		status: NotReadyStatus("not ready"),
+		readiness: NotReadyReadiness("required client unavailable", ReadinessItem{
+			Name:   "payments",
+			Impact: ReadinessImpactBlocking,
+			Ready:  false,
+			State:  StateNotReady,
+		}),
+	}
+	if err := registry.Register(required); err != nil {
+		t.Fatalf("Register(required) error = %v", err)
+	}
+	if err := registry.Register(optional, Optional()); err != nil {
+		t.Fatalf("Register(optional) error = %v", err)
+	}
+
+	readiness := registry.Readiness(context.Background())
+	if !readiness.Ready {
+		t.Fatalf("system readiness = false, want true: %#v", readiness)
+	}
+	got := readiness.Components[1]
+	if got.Registration.ReadinessPolicy != ReadinessOptional {
+		t.Fatalf("parent policy = %q, want %q", got.Registration.ReadinessPolicy, ReadinessOptional)
+	}
+	if got.Readiness.Ready {
+		t.Fatal("optional parent readiness = true, want false")
+	}
+	if got.Readiness.Items[0].Impact != ReadinessImpactBlocking {
+		t.Fatalf("child impact = %q, want %q", got.Readiness.Items[0].Impact, ReadinessImpactBlocking)
 	}
 }
 
@@ -530,11 +653,11 @@ func TestRegistrySnapshotReadinessPolicies(t *testing.T) {
 	if optionalSnapshot.Readiness.Ready {
 		t.Fatal("Snapshot(optional).Readiness.Ready = true, want false")
 	}
-	if len(optionalSnapshot.Readiness.Components) != 1 {
-		t.Fatalf("Snapshot(optional).Readiness.Components length = %d, want 1", len(optionalSnapshot.Readiness.Components))
+	if len(optionalSnapshot.Readiness.Items) != 1 {
+		t.Fatalf("Snapshot(optional).Readiness.Items length = %d, want 1", len(optionalSnapshot.Readiness.Items))
 	}
-	if optionalSnapshot.Readiness.Components[0].Policy != ReadinessOptional {
-		t.Fatalf("Snapshot(optional).Readiness.Components[0].Policy = %q, want %q", optionalSnapshot.Readiness.Components[0].Policy, ReadinessOptional)
+	if optionalSnapshot.Readiness.Items[0].Impact != ReadinessImpactBlocking {
+		t.Fatalf("Snapshot(optional).Readiness.Items[0].Impact = %q, want %q", optionalSnapshot.Readiness.Items[0].Impact, ReadinessImpactBlocking)
 	}
 
 	requiredSnapshot, err := registry.Snapshot(ctx, "required")
@@ -547,11 +670,11 @@ func TestRegistrySnapshotReadinessPolicies(t *testing.T) {
 	if requiredSnapshot.Readiness == nil {
 		t.Fatal("Snapshot(required).Readiness is nil, want contributor readiness")
 	}
-	if len(requiredSnapshot.Readiness.Components) != 1 {
-		t.Fatalf("Snapshot(required).Readiness.Components length = %d, want 1", len(requiredSnapshot.Readiness.Components))
+	if len(requiredSnapshot.Readiness.Items) != 1 {
+		t.Fatalf("Snapshot(required).Readiness.Items length = %d, want 1", len(requiredSnapshot.Readiness.Items))
 	}
-	if requiredSnapshot.Readiness.Components[0].Policy != ReadinessRequired {
-		t.Fatalf("Snapshot(required).Readiness.Components[0].Policy = %q, want %q", requiredSnapshot.Readiness.Components[0].Policy, ReadinessRequired)
+	if requiredSnapshot.Readiness.Items[0].Impact != ReadinessImpactBlocking {
+		t.Fatalf("Snapshot(required).Readiness.Items[0].Impact = %q, want %q", requiredSnapshot.Readiness.Items[0].Impact, ReadinessImpactBlocking)
 	}
 
 	informationalSnapshot, err := registry.Snapshot(ctx, "informational")
@@ -707,14 +830,14 @@ func TestRegistrySnapshotRecoversStatusPanic(t *testing.T) {
 	if snapshot.Readiness == nil {
 		t.Fatal("Snapshot.Readiness is nil, want readiness")
 	}
-	if snapshot.Readiness.Components[0].State != StateUnknown {
-		t.Fatalf("Snapshot.Readiness.Components[0].State = %q, want %q", snapshot.Readiness.Components[0].State, StateUnknown)
+	if snapshot.Readiness.Items[0].State != StateUnknown {
+		t.Fatalf("Snapshot.Readiness.Items[0].State = %q, want %q", snapshot.Readiness.Items[0].State, StateUnknown)
 	}
-	if snapshot.Readiness.Components[0].Reason != componentStatusPanicMessage {
-		t.Fatalf("Snapshot.Readiness.Components[0].Reason = %q, want %q", snapshot.Readiness.Components[0].Reason, componentStatusPanicMessage)
+	if snapshot.Readiness.Items[0].Reason != componentStatusPanicMessage {
+		t.Fatalf("Snapshot.Readiness.Items[0].Reason = %q, want %q", snapshot.Readiness.Items[0].Reason, componentStatusPanicMessage)
 	}
 	if strings.Contains(snapshot.Status.Message, "secret") ||
-		strings.Contains(snapshot.Readiness.Components[0].Reason, "secret") {
+		strings.Contains(snapshot.Readiness.Items[0].Reason, "secret") {
 		t.Fatalf("panic value exposed in snapshot %+v", snapshot)
 	}
 }
@@ -746,14 +869,14 @@ func TestRegistrySnapshotRecoversReadinessPanic(t *testing.T) {
 	if snapshot.Readiness.Ready {
 		t.Fatal("Snapshot.Readiness.Ready = true, want false")
 	}
-	if snapshot.Readiness.Components[0].State != StateUnknown {
-		t.Fatalf("Snapshot.Readiness.Components[0].State = %q, want %q", snapshot.Readiness.Components[0].State, StateUnknown)
+	if snapshot.Readiness.Items[0].State != StateUnknown {
+		t.Fatalf("Snapshot.Readiness.Items[0].State = %q, want %q", snapshot.Readiness.Items[0].State, StateUnknown)
 	}
-	if snapshot.Readiness.Components[0].Reason != componentReadinessPanicMessage {
-		t.Fatalf("Snapshot.Readiness.Components[0].Reason = %q, want %q", snapshot.Readiness.Components[0].Reason, componentReadinessPanicMessage)
+	if snapshot.Readiness.Items[0].Reason != componentReadinessPanicMessage {
+		t.Fatalf("Snapshot.Readiness.Items[0].Reason = %q, want %q", snapshot.Readiness.Items[0].Reason, componentReadinessPanicMessage)
 	}
-	if strings.Contains(snapshot.Readiness.Components[0].Reason, "secret") {
-		t.Fatalf("panic value exposed in snapshot readiness %+v", snapshot.Readiness.Components[0])
+	if strings.Contains(snapshot.Readiness.Items[0].Reason, "secret") {
+		t.Fatalf("panic value exposed in snapshot readiness %+v", snapshot.Readiness.Items[0])
 	}
 }
 
@@ -1290,12 +1413,13 @@ func TestRegistryReadModelsUseRegisteredComponentInfo(t *testing.T) {
 	if len(readiness.Components) != 1 {
 		t.Fatalf("Readiness.Components length = %d, want 1", len(readiness.Components))
 	}
-	if got := readiness.Components[0].Name; got != "component" {
-		t.Fatalf("Readiness.Components[0].Name = %q, want component", got)
+	if got := readiness.Components[0].Component.Name; got != "component" {
+		t.Fatalf("Readiness.Components[0].Component.Name = %q, want component", got)
 	}
-	if got := readiness.Components[0].Kind; got != "test" {
-		t.Fatalf("Readiness.Components[0].Kind = %q, want test", got)
+	if got := readiness.Components[0].Component.Kind; got != "test" {
+		t.Fatalf("Readiness.Components[0].Component.Kind = %q, want test", got)
 	}
+	readiness.Components[0].Component.Labels[0] = Attr("tier", "mutated")
 
 	snapshot, err := registry.Snapshot(ctx, "component")
 	if err != nil {
@@ -1306,15 +1430,17 @@ func TestRegistryReadModelsUseRegisteredComponentInfo(t *testing.T) {
 	if snapshot.Readiness == nil {
 		t.Fatal("Snapshot.Readiness is nil, want readiness")
 	}
-	if got := snapshot.Readiness.Components[0].Name; got != "component" {
-		t.Fatalf("Snapshot.Readiness.Components[0].Name = %q, want component", got)
+	if got := snapshot.Readiness.Items[0].Name; got != "component" {
+		t.Fatalf("Snapshot.Readiness.Items[0].Name = %q, want component", got)
 	}
-	if got := snapshot.Readiness.Components[0].Kind; got != "test" {
-		t.Fatalf("Snapshot.Readiness.Components[0].Kind = %q, want test", got)
+	if got := snapshot.Readiness.Items[0].Kind; got != "test" {
+		t.Fatalf("Snapshot.Readiness.Items[0].Kind = %q, want test", got)
 	}
 
 	nextStatus := registry.Status(ctx)
 	requireComponentInfo(t, nextStatus.Components[0].Component, wantInfo)
+	nextReadiness := registry.Readiness(ctx)
+	requireComponentInfo(t, nextReadiness.Components[0].Component, wantInfo)
 
 	nextSnapshot, err := registry.Snapshot(ctx, "component")
 	if err != nil {
