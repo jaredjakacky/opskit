@@ -100,9 +100,10 @@ type ComponentSnapshot struct {
 	Status       Status                `json:"status"`
 	Readiness    *Readiness            `json:"readiness,omitempty"`
 	Inspection   *Inspection           `json:"inspection,omitempty"`
-	// InspectionError is exposed through operational surfaces when snapshot
-	// inspection fails. Inspectors must return only safe, redacted errors.
-	InspectionError string `json:"inspection_error,omitempty"`
+	// InspectionFailure is generic safe public failure detail set when snapshot
+	// inspection fails. The inspector's returned error is never copied into the
+	// snapshot.
+	InspectionFailure *Failure `json:"inspection_failure,omitempty"`
 }
 
 // ComponentFunc is a lightweight Component implementation backed by a function.

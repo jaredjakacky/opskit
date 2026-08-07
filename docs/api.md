@@ -25,10 +25,12 @@ Second, readiness is explicit. A component can be unhealthy, degraded, optional,
 or informational without forcing every consumer to infer admission policy from a
 single status field.
 
-Third, every value returned by Opskit contracts is safe for operational surfaces.
-Statuses, attributes, inspections, check errors, and command results may flow
-into logs, admin endpoints, dashboards, support tooling, or test output.
-Components must redact secrets before returning data.
+Third, every operational data value returned by Opskit contracts is safe for
+operational surfaces. Statuses, attributes, inspections, check failures, and
+command results may flow into logs, admin endpoints, dashboards, support
+tooling, or test output. Components must redact secrets before returning data.
+Ordinary Go `error` return channels remain private diagnostic/control-flow
+channels and are not automatically safe to expose.
 
 ## Core Vocabulary
 
@@ -74,6 +76,24 @@ Opskit does not validate attribute keys. Prefer stable safe-token keys using
 ASCII letters, ASCII digits, dots, underscores, and hyphens. Presentation and
 telemetry layers may apply stricter rules before turning attributes into log
 fields, metrics labels, filters, or routes.
+
+### `Failure`
+
+`Failure` is explicit public operational failure detail:
+
+```go
+type Failure struct {
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+```
+
+Both fields must be safe to expose. `Failure` deliberately has no `error` or
+cause field: the implementing component or domain kit retains internal errors
+through its native API, state, or private observation path. Opskit-only check
+and command interfaces do not provide a private cause channel. APIs that accept
+a `Failure` make the decision to publish detail explicit; default failure
+constructors omit it.
 
 ### `Duration`
 
@@ -419,13 +439,13 @@ optional. Contributors that need child policy should return readiness built with
 
 ```go
 type ComponentSnapshot struct {
-	Component    ComponentInfo         `json:"component"`
-	Registration ComponentRegistration `json:"registration"`
-	Capabilities ComponentCapabilities `json:"capabilities"`
-	Status       Status                `json:"status"`
-	Readiness    *Readiness            `json:"readiness,omitempty"`
-	Inspection   *Inspection           `json:"inspection,omitempty"`
-	InspectionError string             `json:"inspection_error,omitempty"`
+	Component         ComponentInfo         `json:"component"`
+	Registration      ComponentRegistration `json:"registration"`
+	Capabilities      ComponentCapabilities `json:"capabilities"`
+	Status            Status                `json:"status"`
+	Readiness         *Readiness            `json:"readiness,omitempty"`
+	Inspection        *Inspection           `json:"inspection,omitempty"`
+	InspectionFailure *Failure              `json:"inspection_failure,omitempty"`
 }
 ```
 
@@ -433,11 +453,14 @@ Snapshots include readiness for required and optional components. Informational
 components do not receive readiness snapshots, even if they implement
 `ReadinessContributor`.
 If inspection fails while building a snapshot, the snapshot still includes
-status, registration, capabilities, and readiness; `inspection_error` contains
-the inspection failure and `inspection` is omitted.
+status, registration, capabilities, and readiness; `inspection_failure`
+contains a generic public failure with stable code `inspection_failed`, and
+`inspection` is omitted. The inspector's
+arbitrary error text is not copied into the snapshot. Direct `Registry.Inspect`
+calls still return the original error to their internal caller.
 
-If inspection panics while building a snapshot, `inspection_error` contains a
-generic panic message and the panic value is not exposed.
+If inspection panics while building a snapshot, `inspection_failure` is also
+generic and the panic value is not exposed.
 
 `Registry` methods normalize nil contexts to `context.Background()`. Methods
 that evaluate components synchronously respect canceled contexts. For request
@@ -597,7 +620,7 @@ type CheckResult struct {
 	State      State       `json:"state"`
 	Ready      bool        `json:"ready"`
 	Message    string      `json:"message,omitempty"`
-	Error      string      `json:"error,omitempty"`
+	Failure    *Failure    `json:"failure,omitempty"`
 	CheckedAt  *time.Time  `json:"checked_at,omitempty"`
 	Duration   Duration    `json:"duration,omitempty"`
 	Attributes []Attribute `json:"attributes,omitempty"`
@@ -610,7 +633,8 @@ Constructors:
 func ReadyCheck(message string, duration time.Duration, attrs ...Attribute) CheckResult
 func DegradedCheck(message string, duration time.Duration, attrs ...Attribute) CheckResult
 func NotReadyCheck(message string, duration time.Duration, attrs ...Attribute) CheckResult
-func FailedCheck(message string, err error, duration time.Duration, attrs ...Attribute) CheckResult
+func FailedCheck(message string, duration time.Duration, attrs ...Attribute) CheckResult
+func FailedCheckWithFailure(message string, failure Failure, duration time.Duration, attrs ...Attribute) CheckResult
 ```
 
 Defaults:
@@ -623,8 +647,9 @@ Defaults:
 | `FailedCheck` | `failed` | `false` |
 
 Check constructors set `CheckedAt` to current UTC time, store the supplied
-duration, and clone attributes. `FailedCheck` copies `err.Error()` into the
-public `Error` field when `err` is non-nil, so callers must pass safe errors.
+duration, and clone attributes. `FailedCheck` omits detailed failure text.
+Use `FailedCheckWithFailure` only when the code and message are explicitly safe
+public operational data.
 
 ### `CheckSummary`
 
@@ -751,7 +776,7 @@ type CommandResult struct {
 	State      State       `json:"state"`
 	Accepted   bool        `json:"accepted"`
 	Message    string      `json:"message,omitempty"`
-	Error      string      `json:"error,omitempty"`
+	Failure    *Failure    `json:"failure,omitempty"`
 	StartedAt  *time.Time  `json:"started_at,omitempty"`
 	FinishedAt *time.Time  `json:"finished_at,omitempty"`
 	Duration   Duration    `json:"duration,omitempty"`
@@ -766,7 +791,9 @@ Constructors:
 func AcceptedCommand(message string, attrs ...Attribute) CommandResult
 func CompletedCommand(message string, result any, duration time.Duration, attrs ...Attribute) CommandResult
 func RejectedCommand(message string, attrs ...Attribute) CommandResult
-func FailedCommand(message string, err error, duration time.Duration, attrs ...Attribute) CommandResult
+func RejectedCommandWithFailure(message string, failure Failure, attrs ...Attribute) CommandResult
+func FailedCommand(message string, duration time.Duration, attrs ...Attribute) CommandResult
+func FailedCommandWithFailure(message string, failure Failure, duration time.Duration, attrs ...Attribute) CommandResult
 ```
 
 Defaults:
@@ -779,7 +806,9 @@ Defaults:
 | `FailedCommand` | `failed` | `true` | admitted but failed |
 
 `Accepted` means the command was admitted, not necessarily completed. Command
-results are operational output and must contain only safe values.
+results are operational output and must contain only safe values. Rejected and
+failed command constructors omit detailed failure text by default. Their
+`WithFailure` variants accept only explicit public operational detail.
 
 `AcceptedCommand` does not manage work that continues after `HandleCommand`
 returns. Such work should be handed to a durable queue or another explicitly
@@ -820,7 +849,11 @@ func (c *Cache) Status(context.Context) opskit.Status {
 func (c *Cache) Check(ctx context.Context) opskit.CheckResult {
 	started := time.Now()
 	if err := c.ping(ctx); err != nil {
-		return opskit.FailedCheck("cache ping failed", errors.New("timeout"), time.Since(started))
+		return opskit.FailedCheckWithFailure(
+			"cache ping failed",
+			opskit.Failure{Code: "timeout", Message: "cache did not respond before the deadline"},
+			time.Since(started),
+		)
 	}
 	return opskit.ReadyCheck("cache reachable", time.Since(started))
 }
@@ -855,3 +888,21 @@ stable contract without pulling in a runtime dependency or framework lifecycle.
 When extending the API, prefer additions over semantic changes. In particular,
 avoid changing JSON field names, readiness policy behavior, state meanings,
 registration validation, or constructor defaults without a major-version reason.
+
+### Failure presentation migration
+
+The safe-failure change after `v0.2.0` is intentionally breaking and should be
+released with coordinated sibling-kit version bumps:
+
+| Before | After |
+| --- | --- |
+| `FailedCheck(message, err, duration, ...)` | `FailedCheck(message, duration, ...)` |
+| safe check error detail | `FailedCheckWithFailure(message, Failure{...}, duration, ...)` |
+| `FailedCommand(message, err, duration, ...)` | `FailedCommand(message, duration, ...)` |
+| safe command error detail | `FailedCommandWithFailure(message, Failure{...}, duration, ...)` |
+| `result.Error` | `result.Failure.Message` only when the old text was already public-safe |
+| `inspection_error` | `inspection_failure.code` and `inspection_failure.message` |
+
+Direct `Registry.Inspect` semantics are unchanged: it returns the inspector's
+original error on its private error channel. `Registry.Snapshot` never publishes
+that arbitrary text.

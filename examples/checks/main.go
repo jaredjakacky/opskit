@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -46,9 +45,9 @@ func (dependencyChecks) Checks(context.Context) []opskit.CheckDescriptor {
 }
 
 func (dependencyChecks) Check(context.Context) opskit.CheckResult {
-	return opskit.FailedCheck(
+	return opskit.FailedCheckWithFailure(
 		"primary cache ping failed",
-		errors.New("timeout after 50ms"),
+		opskit.Failure{Code: "timeout", Message: "cache did not respond before the deadline"},
 		50*time.Millisecond,
 		opskit.Attr("target", "cache"),
 	)

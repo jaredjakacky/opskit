@@ -458,7 +458,7 @@ It includes:
 - status
 - readiness when the component participates in readiness
 - inspection when supported
-- inspection error when inspection fails
+- generic inspection failure detail when inspection fails
 
 ```mermaid
 sequenceDiagram
@@ -488,7 +488,7 @@ sequenceDiagram
       Registry->>Registry: attach inspection
     else inspection fails
       Component-->>Registry: error
-      Registry->>Registry: attach inspection_error
+      Registry->>Registry: attach generic inspection_failure
     end
   end
 
@@ -541,6 +541,11 @@ type CheckGroup interface {
 worker runtimes, and docs generators discover supported check names and
 operator-facing hints without running the checks.
 
+Failed checks omit detailed failure text by default. A caller may use
+`FailedCheckWithFailure` to publish an explicit stable code and safe message.
+The underlying error remains in the component or domain kit; it is never stored
+in the public `CheckResult`.
+
 Opskit does not decide when checks run. It does not schedule them, retry them,
 cache them, or decide whether they should affect readiness.
 
@@ -580,6 +585,10 @@ metadata and avoids treating the command noun as a verb.
 `CommandDescriber` is passive command metadata. It lets presentation layers,
 CLIs, worker runtimes, and docs generators discover supported command names and
 operator-facing hints without invoking the command.
+
+Rejected and failed commands omit detailed failure text by default. Their
+`WithFailure` constructors accept only an explicit public `Failure`; private
+causes stay with the command implementation or its native execution layer.
 
 Opskit does not dispatch commands. It does not authorize callers, validate
 transport input, enforce concurrency, retry commands, or audit their execution.

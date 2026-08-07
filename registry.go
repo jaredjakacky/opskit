@@ -353,11 +353,11 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 	if inspector, ok := component.(Inspector); ok {
 		inspection, err, panicked := safeComponentInspection(inspector, ctx)
 		if panicked {
-			snapshot.InspectionError = componentInspectionPanicMessage
+			snapshot.InspectionFailure = componentInspectionFailure()
 			return snapshot, nil
 		}
 		if err != nil {
-			snapshot.InspectionError = err.Error()
+			snapshot.InspectionFailure = componentInspectionFailure()
 			return snapshot, nil
 		}
 		snapshot.Inspection = &inspection
@@ -369,9 +369,12 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 // Inspect returns safe operational inspection data for one registered component.
 //
 // Inspect calls the component inspector synchronously. Use a context with an
-// appropriate deadline when serving admin request paths. If the inspector
-// panics, Inspect recovers and returns ErrComponentPanicked without exposing the
-// panic value.
+// appropriate deadline when serving admin request paths. A returned inspector
+// error is a private diagnostic/control-flow channel: it may contain arbitrary
+// text and must not be copied into an operational response or log without an
+// application-owned presentation policy. Registry.Snapshot uses a generic
+// public failure instead. If the inspector panics, Inspect recovers and returns
+// ErrComponentPanicked without exposing the panic value.
 func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error) {
 	ctx = normalizeContext(ctx)
 

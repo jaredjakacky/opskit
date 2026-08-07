@@ -3,7 +3,6 @@ package opskit
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 )
@@ -296,10 +295,28 @@ func TestRejectedCommand(t *testing.T) {
 	}
 }
 
+func TestRejectedCommandWithFailure(t *testing.T) {
+	result := RejectedCommandWithFailure(
+		"disabled",
+		Failure{Code: "disabled", Message: "command is disabled"},
+		Attr("command", "refresh"),
+	)
+
+	if result.State != StateNotReady || result.Accepted {
+		t.Fatalf("result = %+v, want rejected not-ready command", result)
+	}
+	if result.Failure == nil || *result.Failure != (Failure{Code: "disabled", Message: "command is disabled"}) {
+		t.Fatalf("Failure = %+v, want disabled failure", result.Failure)
+	}
+	if len(result.Attributes) != 1 || result.Attributes[0] != Attr("command", "refresh") {
+		t.Fatalf("Attributes = %+v, want command refresh", result.Attributes)
+	}
+}
+
 func TestFailedCommand(t *testing.T) {
 	attrs := []Attribute{Attr("command", "refresh")}
 
-	result := FailedCommand("failed", errors.New("boom"), 150*time.Millisecond, attrs...)
+	result := FailedCommandWithFailure("failed", Failure{Code: "unavailable", Message: "backend unavailable"}, 150*time.Millisecond, attrs...)
 	attrs[0] = Attr("command", "mutated")
 
 	if result.State != StateFailed {
@@ -311,8 +328,8 @@ func TestFailedCommand(t *testing.T) {
 	if result.Message != "failed" {
 		t.Fatalf("Message = %q, want failed", result.Message)
 	}
-	if result.Error != "boom" {
-		t.Fatalf("Error = %q, want boom", result.Error)
+	if result.Failure == nil || *result.Failure != (Failure{Code: "unavailable", Message: "backend unavailable"}) {
+		t.Fatalf("Failure = %+v, want unavailable failure", result.Failure)
 	}
 	if result.StartedAt == nil {
 		t.Fatal("StartedAt is nil")
@@ -328,14 +345,21 @@ func TestFailedCommand(t *testing.T) {
 	}
 }
 
-func TestFailedCommandWithNilError(t *testing.T) {
-	result := FailedCommand("failed", nil, 0)
+func TestFailedCommandOmitsFailureByDefault(t *testing.T) {
+	result := FailedCommand("failed", 0)
 
 	if result.State != StateFailed {
 		t.Fatalf("State = %q, want %q", result.State, StateFailed)
 	}
-	if result.Error != "" {
-		t.Fatalf("Error = %q, want empty", result.Error)
+	if result.Failure != nil {
+		t.Fatalf("Failure = %+v, want nil", result.Failure)
+	}
+}
+
+func TestFailedCommandWithZeroFailureOmitsFailure(t *testing.T) {
+	result := FailedCommandWithFailure("failed", Failure{}, 0)
+	if result.Failure != nil {
+		t.Fatalf("Failure = %+v, want nil", result.Failure)
 	}
 }
 
@@ -349,6 +373,22 @@ func TestCommandResultJSONOmitEmptyFields(t *testing.T) {
 	}
 
 	want := `{"state":"not_ready","accepted":false}`
+	if string(data) != want {
+		t.Fatalf("Marshal CommandResult = %s, want %s", data, want)
+	}
+}
+
+func TestCommandResultJSONIncludesFailure(t *testing.T) {
+	data, err := json.Marshal(CommandResult{
+		State:    StateFailed,
+		Accepted: true,
+		Failure:  &Failure{Code: "unavailable", Message: "backend unavailable"},
+	})
+	if err != nil {
+		t.Fatalf("Marshal CommandResult error = %v", err)
+	}
+
+	want := `{"state":"failed","accepted":true,"failure":{"code":"unavailable","message":"backend unavailable"}}`
 	if string(data) != want {
 		t.Fatalf("Marshal CommandResult = %s, want %s", data, want)
 	}

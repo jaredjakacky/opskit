@@ -13,10 +13,10 @@ type CheckResult struct {
 	State   State  `json:"state"`
 	Ready   bool   `json:"ready"`
 	Message string `json:"message,omitempty"`
-	// Error is exposed through operational surfaces. Callers must not include
+	// Failure is explicit safe public failure detail. It must not contain
 	// secrets, credentials, tokens, raw connection strings, or unredacted user
 	// data.
-	Error      string      `json:"error,omitempty"`
+	Failure    *Failure    `json:"failure,omitempty"`
 	CheckedAt  *time.Time  `json:"checked_at,omitempty"`
 	Duration   Duration    `json:"duration,omitempty"`
 	Attributes []Attribute `json:"attributes,omitempty"`
@@ -119,12 +119,10 @@ func NotReadyCheck(message string, duration time.Duration, attrs ...Attribute) C
 	}
 }
 
-// FailedCheck returns a failed check result with the current UTC timestamp.
-//
-// The error text may be exposed through operational surfaces, so callers should
-// pass only safe, redacted errors.
-func FailedCheck(message string, err error, duration time.Duration, attrs ...Attribute) CheckResult {
-	result := CheckResult{
+// FailedCheck returns a failed check result without detailed failure text and
+// with the current UTC timestamp.
+func FailedCheck(message string, duration time.Duration, attrs ...Attribute) CheckResult {
+	return CheckResult{
 		State:      StateFailed,
 		Ready:      false,
 		Message:    message,
@@ -132,11 +130,13 @@ func FailedCheck(message string, err error, duration time.Duration, attrs ...Att
 		Duration:   NewDuration(duration),
 		Attributes: cloneAttributes(attrs),
 	}
+}
 
-	if err != nil {
-		result.Error = err.Error()
-	}
-
+// FailedCheckWithFailure returns a failed check result with explicit safe
+// public failure detail and the current UTC timestamp.
+func FailedCheckWithFailure(message string, failure Failure, duration time.Duration, attrs ...Attribute) CheckResult {
+	result := FailedCheck(message, duration, attrs...)
+	result.Failure = failurePtr(failure)
 	return result
 }
 
@@ -259,6 +259,9 @@ func cloneNamedChecks(results []NamedCheck) []NamedCheck {
 
 	cloned := make([]NamedCheck, len(results))
 	for i, result := range results {
+		if result.Result.Failure != nil {
+			result.Result.Failure = failurePtr(*result.Result.Failure)
+		}
 		result.Result.Attributes = cloneAttributes(result.Result.Attributes)
 		cloned[i] = result
 	}
