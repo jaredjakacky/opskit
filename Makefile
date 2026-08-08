@@ -6,9 +6,7 @@ PKGS ?= ./...
 GOFILES := $(filter-out $(shell git ls-files --deleted -- '*.go'),$(shell git ls-files -- '*.go'))
 EXAMPLE_GOFILES := $(shell find examples -name '*.go' -print 2>/dev/null)
 GOVULNCHECK_VERSION ?= v1.6.0
-ALLOW_TIDY_CHANGES ?= 0
 RELEASE_CHECK_DIR := tools/releasecheck
-MODULE_FILES := go.mod go.sum $(RELEASE_CHECK_DIR)/go.mod $(RELEASE_CHECK_DIR)/go.sum
 
 # Keep build cache inside the repo so local runs are reproducible and do not
 # depend on a writable global cache path.
@@ -86,25 +84,15 @@ coverage: ## Run tests with coverage output written to coverage.out.
 	@echo "==> coverage"
 	@$(GO) test -coverprofile=coverage.out $(PKGS)
 
-tidy: ## Run go mod tidy; fail if it changes go.mod/go.sum unless explicitly allowed.
+tidy: ## Synchronize go.mod and go.sum with the source tree.
 	@echo "==> tidy"
-	@if [ "$(ALLOW_TIDY_CHANGES)" != "1" ]; then \
-		before="$$(git diff -- $(MODULE_FILES))"; \
-		$(GO) mod tidy; \
-		GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) mod tidy; \
-		after="$$(git diff -- $(MODULE_FILES))"; \
-		if [ "$$before" != "$$after" ]; then \
-			echo "go mod tidy changed module files. Commit the changes or rerun with ALLOW_TIDY_CHANGES=1."; \
-			git --no-pager diff -- $(MODULE_FILES) || true; \
-			exit 1; \
-		fi; \
-	else \
-		$(GO) mod tidy; \
-		GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) mod tidy; \
-	fi
+	@GOWORK=off $(GO) mod tidy
+	@GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) mod tidy
 
 tidy-check: ## Verify go.mod/go.sum are already tidy.
-	@$(MAKE) tidy ALLOW_TIDY_CHANGES=0
+	@echo "==> checking tidy"
+	@GOWORK=off $(GO) mod tidy -diff
+	@GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) mod tidy -diff
 
 govulncheck: ## Run the pinned govulncheck tool against all verified modules.
 	@echo "==> govulncheck"
