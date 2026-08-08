@@ -24,6 +24,26 @@ func TestInspectionJSONIncludesSummaryDetailsAndAttributes(t *testing.T) {
 	requireJSON(t, inspection, `{"summary":"cache online","details":{"entries":42,"mode":"write-through"},"attributes":[{"key":"shard","value":"primary"}]}`)
 }
 
+func TestCloneInspectionCopiesAttributesOnly(t *testing.T) {
+	opaque := &struct{ Value string }{Value: "snapshot"}
+	attributes := []Attribute{Attr("scope", "admin")}
+	inspection := Inspection{
+		Summary:    opaque,
+		Details:    opaque,
+		Attributes: attributes,
+	}
+
+	cloned := cloneInspection(inspection)
+	attributes[0] = Attr("scope", "mutated")
+
+	if cloned.Summary != opaque || cloned.Details != opaque {
+		t.Fatal("cloneInspection copied opaque values, want original identities")
+	}
+	if cloned.Attributes[0] != Attr("scope", "admin") {
+		t.Fatalf("Attributes = %+v, want original attributes", cloned.Attributes)
+	}
+}
+
 func TestInspectionJSONRoundTripArbitraryPayloads(t *testing.T) {
 	input := []byte(`{"summary":{"state":"ok"},"details":["one","two"],"attributes":[{"key":"component","value":"cache"}]}`)
 

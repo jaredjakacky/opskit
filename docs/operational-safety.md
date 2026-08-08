@@ -10,6 +10,12 @@ returned data as potentially visible.
 
 Any operational data value returned through Opskit must be safe to expose.
 
+Registry defensively copies mutable fields whose concrete structure Opskit owns,
+such as status timestamps and attribute slices. Opaque domain values such as
+`Inspection.Summary`, `Inspection.Details`, and `CommandResult.Result` are not
+deep-copied. Mutable values stored in those fields must remain immutable
+snapshots once returned.
+
 This rule applies to operational data values. Ordinary Go `error` returns such
 as the error from direct `Registry.Inspect` are private diagnostic/control-flow
 channels and may contain arbitrary text. Do not copy them into public data or

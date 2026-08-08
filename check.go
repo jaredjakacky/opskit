@@ -177,7 +177,8 @@ func (fn CheckGroupFunc) CheckAll(ctx context.Context) CheckSummary {
 	return fn(ctx)
 }
 
-// SummarizeChecks builds a CheckSummary from named check results.
+// SummarizeChecks builds a CheckSummary from named check results. It defensively
+// copies the result slice and mutable Opskit-owned fields in each CheckResult.
 //
 // The summary is ready only when every result is ready. The summary state is a
 // coarse check summary: unknown when no checks ran, failed when any check
@@ -259,13 +260,20 @@ func cloneNamedChecks(results []NamedCheck) []NamedCheck {
 
 	cloned := make([]NamedCheck, len(results))
 	for i, result := range results {
-		if result.Result.Failure != nil {
-			result.Result.Failure = failurePtr(*result.Result.Failure)
-		}
-		result.Result.Attributes = cloneAttributes(result.Result.Attributes)
+		result.Result = cloneCheckResult(result.Result)
 		cloned[i] = result
 	}
 	return cloned
+}
+
+func cloneCheckResult(result CheckResult) CheckResult {
+	result.CheckedAt = cloneTimePtr(result.CheckedAt)
+	if result.Failure != nil {
+		failure := *result.Failure
+		result.Failure = &failure
+	}
+	result.Attributes = cloneAttributes(result.Attributes)
+	return result
 }
 
 func cloneCheckDescriptors(checks []CheckDescriptor) []CheckDescriptor {

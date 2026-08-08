@@ -318,6 +318,41 @@ func TestSummarizeChecksAllReady(t *testing.T) {
 	}
 }
 
+func TestSummarizeChecksDetachesNestedCheckResult(t *testing.T) {
+	wantCheckedAt := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	checkedAt := wantCheckedAt
+	failure := Failure{}
+	attributes := []Attribute{Attr("target", "cache")}
+	results := []NamedCheck{
+		{
+			Name: "cache",
+			Result: CheckResult{
+				State:      StateFailed,
+				Ready:      false,
+				Failure:    &failure,
+				CheckedAt:  &checkedAt,
+				Attributes: attributes,
+			},
+		},
+	}
+
+	summary := SummarizeChecks("", time.Now().UTC(), results)
+	checkedAt = checkedAt.Add(time.Hour)
+	failure.Message = "mutated"
+	attributes[0] = Attr("target", "mutated")
+
+	got := summary.Results[0].Result
+	if got.CheckedAt == nil || !got.CheckedAt.Equal(wantCheckedAt) {
+		t.Fatalf("CheckedAt = %v, want %v", got.CheckedAt, wantCheckedAt)
+	}
+	if got.Failure == nil || *got.Failure != (Failure{}) {
+		t.Fatalf("Failure = %+v, want non-nil zero failure", got.Failure)
+	}
+	if got.Attributes[0] != Attr("target", "cache") {
+		t.Fatalf("Attributes = %+v, want original attributes", got.Attributes)
+	}
+}
+
 func TestSummarizeChecksDegraded(t *testing.T) {
 	results := []NamedCheck{
 		{Name: "cache", Result: DegradedCheck("slow", 0)},
