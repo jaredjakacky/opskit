@@ -2,6 +2,7 @@ package opskit
 
 import (
 	"context"
+	"reflect"
 	"sync"
 )
 
@@ -86,13 +87,19 @@ func NewRegistry() *Registry {
 	return &Registry{}
 }
 
-// Register adds a component to the registry.
+// Register adds a component to the registry. Nil interfaces and typed-nil
+// component values are rejected with ErrNilComponent. If ComponentInfo panics,
+// Register returns ErrComponentPanicked without exposing the panic value.
 func (r *Registry) Register(component Component, opts ...RegisterOption) error {
-	if component == nil {
+	if isNilComponent(component) {
 		return ErrNilComponent
 	}
 
-	info := cloneComponentInfo(component.ComponentInfo())
+	info, err := safeComponentInfo(component)
+	if err != nil {
+		return err
+	}
+	info = cloneComponentInfo(info)
 	if err := ValidateComponentName(info.Name); err != nil {
 		return err
 	}
@@ -122,6 +129,20 @@ func (r *Registry) Register(component Component, opts ...RegisterOption) error {
 	r.order = append(r.order, info.Name)
 
 	return nil
+}
+
+func isNilComponent(component Component) bool {
+	if component == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(component)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // MustRegister adds a component to the registry and panics on error.
@@ -212,6 +233,7 @@ func (r *Registry) Status(ctx context.Context) SystemStatus {
 			system.Components = append(system.Components, canceledComponentStatus(err))
 			return system
 		}
+		status = cloneStatus(status)
 
 		system.Components = append(system.Components, ComponentStatus{
 			Component: reg.info,
@@ -345,6 +367,10 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 
 	component := reg.component
 	status, statusPanicked := safeComponentStatus(component, ctx)
+	if err := ctx.Err(); err != nil {
+		return ComponentSnapshot{}, err
+	}
+	status = cloneStatus(status)
 
 	snapshot := ComponentSnapshot{
 		Component: reg.info,
@@ -353,10 +379,6 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 		},
 		Capabilities: capabilitiesOf(component),
 		Status:       status,
-	}
-
-	if err := ctx.Err(); err != nil {
-		return ComponentSnapshot{}, err
 	}
 
 	if participatesInReadiness(reg.readinessPolicy) {
@@ -384,6 +406,7 @@ func (r *Registry) Snapshot(ctx context.Context, name string) (ComponentSnapshot
 		if panicked || err != nil {
 			snapshot.InspectionFailure = componentInspectionFailure()
 		} else {
+			inspection = cloneInspection(inspection)
 			snapshot.Inspection = &inspection
 		}
 	}
@@ -428,6 +451,7 @@ func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return Inspection{}, ctxErr
 	}
+	inspection = cloneInspection(inspection)
 	return inspection, err
 }
 
@@ -449,21 +473,6 @@ func (r *Registry) Checker(name string) (Checker, error) {
 	}
 
 	return checker, nil
-}
-
-// CheckDescriber returns a registered component as a CheckDescriber.
-func (r *Registry) CheckDescriber(name string) (CheckDescriber, error) {
-	component, ok := r.Component(name)
-	if !ok {
-		return nil, ErrComponentNotFound
-	}
-
-	describer, ok := component.(CheckDescriber)
-	if !ok {
-		return nil, ErrCheckDescriberUnsupported
-	}
-
-	return describer, nil
 }
 
 // Checks returns passive check metadata for one registered component. If the
@@ -542,21 +551,6 @@ func (r *Registry) CommandHandler(name string) (CommandHandler, error) {
 	}
 
 	return handler, nil
-}
-
-// CommandDescriber returns a registered component as a CommandDescriber.
-func (r *Registry) CommandDescriber(name string) (CommandDescriber, error) {
-	component, ok := r.Component(name)
-	if !ok {
-		return nil, ErrComponentNotFound
-	}
-
-	describer, ok := component.(CommandDescriber)
-	if !ok {
-		return nil, ErrCommandDescriberUnsupported
-	}
-
-	return describer, nil
 }
 
 // Commands returns passive command metadata for one registered component. If

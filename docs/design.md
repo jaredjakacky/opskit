@@ -235,15 +235,13 @@ classDiagram
     +Components() []Component
     +Entries() []ComponentEntry
     +Status(ctx) SystemStatus
-    +Readiness(ctx) Readiness
+    +Readiness(ctx) SystemReadiness
     +Snapshot(ctx, name) (ComponentSnapshot, error)
     +Inspect(ctx, name) (Inspection, error)
     +Checker(name) (Checker, error)
-    +CheckDescriber(name) (CheckDescriber, error)
     +Checks(ctx, name) ([]CheckDescriptor, error)
     +CheckGroup(name) (CheckGroup, error)
     +CommandHandler(name) (CommandHandler, error)
-    +CommandDescriber(name) (CommandDescriber, error)
     +Commands(ctx, name) ([]CommandDescriptor, error)
   }
 
@@ -393,7 +391,7 @@ sequenceDiagram
     end
   end
 
-  Registry-->>Caller: aggregate Readiness
+  Registry-->>Caller: SystemReadiness
 ```
 
 The registry aggregates readiness. It does not perform health checks. Expensive

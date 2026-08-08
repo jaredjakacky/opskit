@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRegistryRegisterAndLookup(t *testing.T) {
@@ -179,16 +180,173 @@ func TestRegistryRegisterRejectsNilAndDuplicateComponents(t *testing.T) {
 	}
 }
 
-func TestRegistryMustRegisterPanicsOnError(t *testing.T) {
+func TestIsNilComponent(t *testing.T) {
+	tests := []struct {
+		name      string
+		component Component
+		want      bool
+	}{
+		{name: "nil interface", component: nil, want: true},
+		{name: "typed nil pointer", component: (*nilSafeComponent)(nil), want: true},
+		{name: "typed nil channel", component: nilChannelComponent(nil), want: true},
+		{name: "typed nil function", component: nilFunctionComponent(nil), want: true},
+		{name: "typed nil map", component: nilMapComponent(nil), want: true},
+		{name: "typed nil slice", component: nilSliceComponent(nil), want: true},
+		{name: "value", component: testComponent{}, want: false},
+		{name: "non-nil pointer", component: &nilSafeComponent{}, want: false},
+		{name: "non-nil channel", component: make(nilChannelComponent), want: false},
+		{name: "non-nil function", component: nilFunctionComponent(func() {}), want: false},
+		{name: "non-nil map", component: nilMapComponent{}, want: false},
+		{name: "non-nil slice", component: nilSliceComponent{}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isNilComponent(tt.component); got != tt.want {
+				t.Fatalf("isNilComponent() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRegistryRegisterRejectsTypedNilComponents(t *testing.T) {
+	t.Run("dereferencing ComponentInfo", func(t *testing.T) {
+		registry := NewRegistry()
+		var component *dereferencingNilComponent
+
+		if err := registry.Register(component); err != ErrNilComponent {
+			t.Fatalf("Register(typed nil) error = %v, want %v", err, ErrNilComponent)
+		}
+		if got := len(registry.Components()); got != 0 {
+			t.Fatalf("Components length = %d, want 0", got)
+		}
+	})
+
+	t.Run("nil-safe ComponentInfo", func(t *testing.T) {
+		registry := NewRegistry()
+		var component *nilSafeComponent
+
+		if err := registry.Register(component); err != ErrNilComponent {
+			t.Fatalf("Register(typed nil) error = %v, want %v", err, ErrNilComponent)
+		}
+		if got := len(registry.Components()); got != 0 {
+			t.Fatalf("Components length = %d, want 0", got)
+		}
+		if _, ok := registry.Component("nil-safe"); ok {
+			t.Fatal("Component(nil-safe) ok = true, want false")
+		}
+		if _, err := registry.Checker("nil-safe"); err != ErrComponentNotFound {
+			t.Fatalf("Checker(nil-safe) error = %v, want %v", err, ErrComponentNotFound)
+		}
+	})
+}
+
+func TestRegistryRegisterRecoversComponentInfoPanic(t *testing.T) {
 	registry := NewRegistry()
+	component := componentInfoPanicComponent{
+		panicValue: "secret component identity panic",
+	}
+
+	err := registry.Register(component)
+	if err != ErrComponentPanicked {
+		t.Fatalf("Register error = %v, want %v", err, ErrComponentPanicked)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatalf("Register error exposed panic value %q", err.Error())
+	}
+	if got := len(registry.Components()); got != 0 {
+		t.Fatalf("Components length = %d, want 0", got)
+	}
+	if got := len(registry.Entries()); got != 0 {
+		t.Fatalf("Entries length = %d, want 0", got)
+	}
+	if _, ok := registry.Component("panicking"); ok {
+		t.Fatal("Component(panicking) ok = true, want false")
+	}
+}
+
+func TestRegistryRegisterComponentInfoPanicPreservesOrder(t *testing.T) {
+	registry := NewRegistry()
+	first := testComponent{
+		info:   ComponentInfo{Name: "first", Kind: "test"},
+		status: ReadyStatus("ready"),
+	}
+	last := testComponent{
+		info:   ComponentInfo{Name: "last", Kind: "test"},
+		status: ReadyStatus("ready"),
+	}
+
+	if err := registry.Register(first); err != nil {
+		t.Fatalf("Register(first) error = %v", err)
+	}
+	if err := registry.Register(componentInfoPanicComponent{panicValue: "secret panic"}); err != ErrComponentPanicked {
+		t.Fatalf("Register(panicking) error = %v, want %v", err, ErrComponentPanicked)
+	}
+	if err := registry.Register(last); err != nil {
+		t.Fatalf("Register(last) error = %v", err)
+	}
+
+	entries := registry.Entries()
+	if len(entries) != 2 {
+		t.Fatalf("Entries length = %d, want 2", len(entries))
+	}
+	if got := entries[0].Component.Name; got != "first" {
+		t.Fatalf("Entries[0].Component.Name = %q, want first", got)
+	}
+	if got := entries[1].Component.Name; got != "last" {
+		t.Fatalf("Entries[1].Component.Name = %q, want last", got)
+	}
+}
+
+func TestRegistryRegisterDoesNotFormatComponentInfoPanic(t *testing.T) {
+	registry := NewRegistry()
+	component := componentInfoPanicComponent{panicValue: panicOnErrorString{}}
+
+	if err := registry.Register(component); err != ErrComponentPanicked {
+		t.Fatalf("Register error = %v, want %v", err, ErrComponentPanicked)
+	}
+}
+
+func TestRegistryMustRegisterPanicsOnError(t *testing.T) {
+	tests := []struct {
+		name      string
+		component Component
+	}{
+		{name: "nil interface"},
+		{name: "typed nil", component: (*nilSafeComponent)(nil)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			registry := NewRegistry()
+
+			defer func() {
+				if got := recover(); got != ErrNilComponent {
+					t.Fatalf("MustRegister panic = %v, want %v", got, ErrNilComponent)
+				}
+			}()
+
+			registry.MustRegister(tt.component)
+		})
+	}
+}
+
+func TestRegistryMustRegisterPanicsOnComponentInfoPanic(t *testing.T) {
+	registry := NewRegistry()
+	component := componentInfoPanicComponent{
+		panicValue: "secret component identity panic",
+	}
 
 	defer func() {
-		if recover() == nil {
-			t.Fatal("MustRegister did not panic")
+		if got := recover(); got != ErrComponentPanicked {
+			t.Fatalf("MustRegister panic = %v, want %v", got, ErrComponentPanicked)
+		}
+		if got := len(registry.Components()); got != 0 {
+			t.Fatalf("Components length = %d, want 0", got)
 		}
 	}()
 
-	registry.MustRegister(nil)
+	registry.MustRegister(component)
 }
 
 func TestRegistryStatusCanceledContext(t *testing.T) {
@@ -265,6 +423,65 @@ func TestRegistryStatusRecoversComponentPanic(t *testing.T) {
 	}
 	if got := status.Components[1].Status.State; got != StateReady {
 		t.Fatalf("ready status state = %q, want %q", got, StateReady)
+	}
+}
+
+func TestRegistryReadModelsDetachComponentOwnedFields(t *testing.T) {
+	wantUpdatedAt := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	updatedAt := wantUpdatedAt
+	statusAttributes := []Attribute{Attr("source", "component")}
+	inspectionAttributes := []Attribute{Attr("scope", "admin")}
+	component := &testOperationalComponent{
+		info: ComponentInfo{Name: "component", Kind: "test"},
+		status: Status{
+			State:      StateReady,
+			Ready:      true,
+			Message:    "ready",
+			UpdatedAt:  &updatedAt,
+			Attributes: statusAttributes,
+		},
+		inspection: Inspection{
+			Summary:    "ok",
+			Attributes: inspectionAttributes,
+		},
+	}
+	registry := NewRegistry()
+	if err := registry.Register(component, Informational()); err != nil {
+		t.Fatalf("Register error = %v", err)
+	}
+
+	status := registry.Status(context.Background())
+	snapshot, err := registry.Snapshot(context.Background(), "component")
+	if err != nil {
+		t.Fatalf("Snapshot error = %v", err)
+	}
+	inspection, err := registry.Inspect(context.Background(), "component")
+	if err != nil {
+		t.Fatalf("Inspect error = %v", err)
+	}
+
+	updatedAt = updatedAt.Add(time.Hour)
+	statusAttributes[0] = Attr("source", "mutated")
+	inspectionAttributes[0] = Attr("scope", "mutated")
+
+	gotStatus := status.Components[0].Status
+	if gotStatus.UpdatedAt == nil || !gotStatus.UpdatedAt.Equal(wantUpdatedAt) {
+		t.Fatalf("Status.UpdatedAt = %v, want %v", gotStatus.UpdatedAt, wantUpdatedAt)
+	}
+	if gotStatus.Attributes[0] != Attr("source", "component") {
+		t.Fatalf("Status.Attributes = %+v, want original attributes", gotStatus.Attributes)
+	}
+	if snapshot.Status.UpdatedAt == nil || !snapshot.Status.UpdatedAt.Equal(wantUpdatedAt) {
+		t.Fatalf("Snapshot.Status.UpdatedAt = %v, want %v", snapshot.Status.UpdatedAt, wantUpdatedAt)
+	}
+	if snapshot.Status.Attributes[0] != Attr("source", "component") {
+		t.Fatalf("Snapshot.Status.Attributes = %+v, want original attributes", snapshot.Status.Attributes)
+	}
+	if snapshot.Inspection == nil || snapshot.Inspection.Attributes[0] != Attr("scope", "admin") {
+		t.Fatalf("Snapshot.Inspection = %+v, want original attributes", snapshot.Inspection)
+	}
+	if inspection.Attributes[0] != Attr("scope", "admin") {
+		t.Fatalf("Inspection.Attributes = %+v, want original attributes", inspection.Attributes)
 	}
 }
 
@@ -1209,9 +1426,6 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	if _, err := registry.Checker("operational"); err != nil {
 		t.Fatalf("Checker(operational) error = %v", err)
 	}
-	if _, err := registry.CheckDescriber("operational"); err != nil {
-		t.Fatalf("CheckDescriber(operational) error = %v", err)
-	}
 	checks, err := registry.Checks(context.Background(), "operational")
 	if err != nil {
 		t.Fatalf("Checks(operational) error = %v", err)
@@ -1237,9 +1451,6 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	if _, err := registry.CommandHandler("operational"); err != nil {
 		t.Fatalf("CommandHandler(operational) error = %v", err)
 	}
-	if _, err := registry.CommandDescriber("operational"); err != nil {
-		t.Fatalf("CommandDescriber(operational) error = %v", err)
-	}
 	commands, err := registry.Commands(context.Background(), "operational")
 	if err != nil {
 		t.Fatalf("Commands(operational) error = %v", err)
@@ -1263,9 +1474,6 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	if _, err := registry.Checker("plain"); err != ErrCheckerUnsupported {
 		t.Fatalf("Checker(plain) error = %v, want %v", err, ErrCheckerUnsupported)
 	}
-	if _, err := registry.CheckDescriber("plain"); err != ErrCheckDescriberUnsupported {
-		t.Fatalf("CheckDescriber(plain) error = %v, want %v", err, ErrCheckDescriberUnsupported)
-	}
 	if _, err := registry.Checks(context.Background(), "plain"); err != ErrCheckDescriberUnsupported {
 		t.Fatalf("Checks(plain) error = %v, want %v", err, ErrCheckDescriberUnsupported)
 	}
@@ -1275,18 +1483,12 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	if _, err := registry.CommandHandler("plain"); err != ErrCommandHandlerUnsupported {
 		t.Fatalf("CommandHandler(plain) error = %v, want %v", err, ErrCommandHandlerUnsupported)
 	}
-	if _, err := registry.CommandDescriber("plain"); err != ErrCommandDescriberUnsupported {
-		t.Fatalf("CommandDescriber(plain) error = %v, want %v", err, ErrCommandDescriberUnsupported)
-	}
 	if _, err := registry.Commands(context.Background(), "plain"); err != ErrCommandDescriberUnsupported {
 		t.Fatalf("Commands(plain) error = %v, want %v", err, ErrCommandDescriberUnsupported)
 	}
 
 	if _, err := registry.Checker("missing"); err != ErrComponentNotFound {
 		t.Fatalf("Checker(missing) error = %v, want %v", err, ErrComponentNotFound)
-	}
-	if _, err := registry.CheckDescriber("missing"); err != ErrComponentNotFound {
-		t.Fatalf("CheckDescriber(missing) error = %v, want %v", err, ErrComponentNotFound)
 	}
 	if _, err := registry.Checks(context.Background(), "missing"); err != ErrComponentNotFound {
 		t.Fatalf("Checks(missing) error = %v, want %v", err, ErrComponentNotFound)
@@ -1296,9 +1498,6 @@ func TestRegistryCapabilityAccessors(t *testing.T) {
 	}
 	if _, err := registry.CommandHandler("missing"); err != ErrComponentNotFound {
 		t.Fatalf("CommandHandler(missing) error = %v, want %v", err, ErrComponentNotFound)
-	}
-	if _, err := registry.CommandDescriber("missing"); err != ErrComponentNotFound {
-		t.Fatalf("CommandDescriber(missing) error = %v, want %v", err, ErrComponentNotFound)
 	}
 	if _, err := registry.Commands(context.Background(), "missing"); err != ErrComponentNotFound {
 		t.Fatalf("Commands(missing) error = %v, want %v", err, ErrComponentNotFound)
@@ -1516,6 +1715,87 @@ func (c testComponent) ComponentInfo() ComponentInfo {
 
 func (c testComponent) Status(context.Context) Status {
 	return c.status
+}
+
+type dereferencingNilComponent struct {
+	info   ComponentInfo
+	status Status
+}
+
+func (c *dereferencingNilComponent) ComponentInfo() ComponentInfo {
+	return c.info
+}
+
+func (c *dereferencingNilComponent) Status(context.Context) Status {
+	return c.status
+}
+
+type nilSafeComponent struct {
+	check CheckResult
+}
+
+func (c *nilSafeComponent) ComponentInfo() ComponentInfo {
+	return ComponentInfo{Name: "nil-safe", Kind: "test"}
+}
+
+func (c *nilSafeComponent) Status(context.Context) Status {
+	return ReadyStatus("ready")
+}
+
+func (c *nilSafeComponent) Check(context.Context) CheckResult {
+	return c.check
+}
+
+type nilChannelComponent chan struct{}
+
+func (nilChannelComponent) ComponentInfo() ComponentInfo {
+	return ComponentInfo{Name: "channel", Kind: "test"}
+}
+
+func (nilChannelComponent) Status(context.Context) Status {
+	return ReadyStatus("ready")
+}
+
+type nilFunctionComponent func()
+
+func (nilFunctionComponent) ComponentInfo() ComponentInfo {
+	return ComponentInfo{Name: "function", Kind: "test"}
+}
+
+func (nilFunctionComponent) Status(context.Context) Status {
+	return ReadyStatus("ready")
+}
+
+type nilMapComponent map[string]struct{}
+
+func (nilMapComponent) ComponentInfo() ComponentInfo {
+	return ComponentInfo{Name: "map", Kind: "test"}
+}
+
+func (nilMapComponent) Status(context.Context) Status {
+	return ReadyStatus("ready")
+}
+
+type nilSliceComponent []struct{}
+
+func (nilSliceComponent) ComponentInfo() ComponentInfo {
+	return ComponentInfo{Name: "slice", Kind: "test"}
+}
+
+func (nilSliceComponent) Status(context.Context) Status {
+	return ReadyStatus("ready")
+}
+
+type componentInfoPanicComponent struct {
+	panicValue any
+}
+
+func (c componentInfoPanicComponent) ComponentInfo() ComponentInfo {
+	panic(c.panicValue)
+}
+
+func (componentInfoPanicComponent) Status(context.Context) Status {
+	return ReadyStatus("ready")
 }
 
 type errorInspectorComponent struct {

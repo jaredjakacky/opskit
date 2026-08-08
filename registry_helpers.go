@@ -154,6 +154,17 @@ func panickedReadiness(info ComponentInfo, reason string) Readiness {
 	}
 }
 
+func safeComponentInfo(component Component) (info ComponentInfo, err error) {
+	defer func() {
+		if recover() != nil {
+			info = ComponentInfo{}
+			err = ErrComponentPanicked
+		}
+	}()
+
+	return component.ComponentInfo(), nil
+}
+
 // The safeComponent helpers recover component panics only. Their Registry
 // callers enforce the context acceptance boundary after each helper returns.
 func safeComponentStatus(component Component, ctx context.Context) (status Status, panicked bool) {

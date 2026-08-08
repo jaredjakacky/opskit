@@ -125,9 +125,6 @@ func TestRegistryConcurrentSnapshotAndCapabilityAccessors(t *testing.T) {
 				if _, err := registry.Checker("operational"); err != nil {
 					t.Errorf("Checker error = %v", err)
 				}
-				if _, err := registry.CheckDescriber("operational"); err != nil {
-					t.Errorf("CheckDescriber error = %v", err)
-				}
 				if _, err := registry.Checks(ctx, "operational"); err != nil {
 					t.Errorf("Checks error = %v", err)
 				}
@@ -136,9 +133,6 @@ func TestRegistryConcurrentSnapshotAndCapabilityAccessors(t *testing.T) {
 				}
 				if _, err := registry.CommandHandler("operational"); err != nil {
 					t.Errorf("CommandHandler error = %v", err)
-				}
-				if _, err := registry.CommandDescriber("operational"); err != nil {
-					t.Errorf("CommandDescriber error = %v", err)
 				}
 				if _, err := registry.Commands(ctx, "operational"); err != nil {
 					t.Errorf("Commands error = %v", err)

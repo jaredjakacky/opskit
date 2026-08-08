@@ -14,6 +14,8 @@ import "context"
 // numbers, booleans, nil, slices, maps with string keys, or structs with
 // stable JSON tags. Do not return functions, channels, cyclic values,
 // non-finite floats, or values that require unavailable custom encoders.
+// Registry clones Attributes, but Summary and Details are deliberately opaque
+// and are not deep-copied. They must remain immutable snapshots once returned.
 type Inspection struct {
 	Summary    any         `json:"summary,omitempty"`
 	Details    any         `json:"details,omitempty"`
@@ -32,4 +34,9 @@ type Inspection struct {
 // call external services, or mutate lifecycle state.
 type Inspector interface {
 	Inspect(context.Context) (Inspection, error)
+}
+
+func cloneInspection(inspection Inspection) Inspection {
+	inspection.Attributes = cloneAttributes(inspection.Attributes)
+	return inspection
 }

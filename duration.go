@@ -57,3 +57,12 @@ func timeUTCAt(t time.Time) *time.Time {
 	utc := t.UTC()
 	return &utc
 }
+
+func cloneTimePtr(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+
+	cloned := *value
+	return &cloned
+}

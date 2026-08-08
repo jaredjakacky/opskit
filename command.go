@@ -71,7 +71,9 @@ type CommandResult struct {
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 	Duration   Duration   `json:"duration,omitempty"`
 	// Result is command-specific output. Command handlers must only return
-	// values that are safe for operational surfaces.
+	// values that are safe for operational surfaces. Result is deliberately
+	// opaque and is not deep-copied; it must remain an immutable snapshot once
+	// returned.
 	Result     any         `json:"result,omitempty"`
 	Attributes []Attribute `json:"attributes,omitempty"`
 }

@@ -16,6 +16,21 @@ func TestNewDuration(t *testing.T) {
 	}
 }
 
+func TestCloneTimePtr(t *testing.T) {
+	if got := cloneTimePtr(nil); got != nil {
+		t.Fatalf("cloneTimePtr(nil) = %v, want nil", got)
+	}
+
+	want := time.Date(2026, 8, 8, 12, 0, 0, 0, time.FixedZone("test", -5*60*60))
+	source := want
+	cloned := cloneTimePtr(&source)
+	source = source.Add(time.Hour)
+
+	if cloned == nil || !cloned.Equal(want) || cloned.Location() != want.Location() {
+		t.Fatalf("cloneTimePtr() = %v, want %v with preserved location", cloned, want)
+	}
+}
+
 func TestDurationString(t *testing.T) {
 	duration := NewDuration(90 * time.Second)
 

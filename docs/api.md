@@ -390,6 +390,12 @@ func Informational() RegisterOption
 func WithReadinessPolicy(policy ReadinessPolicy) RegisterOption
 ```
 
+`Register` rejects both nil interfaces and interfaces containing typed-nil
+component values with `ErrNilComponent`. `MustRegister` panics with that same
+error. If a component's `ComponentInfo` method panics, `Register` returns
+`ErrComponentPanicked` without exposing the panic value; `MustRegister` panics
+with that safe sentinel.
+
 Lookup:
 
 ```go
@@ -422,6 +428,11 @@ Registry read models recover panics from component `Status`, `Readiness`,
 with generic unknown or not-ready operational data, or with `ErrComponentPanicked`
 for strict single-component metadata reads. Panic values are not exposed because
 they may contain unsafe details.
+
+When Registry accepts a component result for status or inspection output, it
+defensively copies mutable Opskit-owned fields such as timestamps and attribute
+slices. Opaque `Inspection.Summary` and `Inspection.Details` values are not
+deep-copied and must remain immutable snapshots once returned.
 
 The status read model is:
 
@@ -552,22 +563,29 @@ type ComponentCapabilities struct {
 ```
 
 The registry reports capabilities in `ComponentStatus` and `ComponentSnapshot`.
-It also exposes typed accessors:
+It evaluates passive capabilities and returns their data through:
 
 ```go
 func (r *Registry) Inspect(ctx context.Context, name string) (Inspection, error)
-func (r *Registry) Checker(name string) (Checker, error)
-func (r *Registry) CheckDescriber(name string) (CheckDescriber, error)
 func (r *Registry) Checks(ctx context.Context, name string) ([]CheckDescriptor, error)
-func (r *Registry) CheckGroup(name string) (CheckGroup, error)
-func (r *Registry) CommandHandler(name string) (CommandHandler, error)
-func (r *Registry) CommandDescriber(name string) (CommandDescriber, error)
 func (r *Registry) Commands(ctx context.Context, name string) ([]CommandDescriptor, error)
 ```
 
-These accessors discover capability support. The accessors themselves do not
-schedule, authorize, dispatch, or execute operations. Callers decide whether and
-when to invoke returned capabilities.
+The registry invokes these passive capabilities with panic containment, context
+validation, consistent error semantics, and defensive copying of Opskit-owned
+result fields.
+
+Active capabilities are returned as raw execution handles:
+
+```go
+func (r *Registry) Checker(name string) (Checker, error)
+func (r *Registry) CheckGroup(name string) (CheckGroup, error)
+func (r *Registry) CommandHandler(name string) (CommandHandler, error)
+```
+
+These accessors only discover capability support. They do not schedule,
+authorize, dispatch, or execute operations. Callers decide whether and when to
+invoke the returned capabilities.
 
 ## Inspection
 
@@ -600,7 +618,8 @@ responsible for returning only safe, redacted data.
 `Summary` and `Details` must also be JSON-marshalable. Prefer strings, numbers,
 booleans, null values, slices, maps with string keys, or structs with stable JSON
 tags. Do not return functions, channels, cyclic values, non-finite floats, or
-values that require unavailable custom encoders.
+values that require unavailable custom encoders. Registry does not deep-copy
+these opaque values, so they must remain immutable snapshots once returned.
 
 ## Checks
 
@@ -694,6 +713,9 @@ Check constructors set `CheckedAt` to current UTC time, store the supplied
 duration, and clone attributes. `FailedCheck` omits detailed failure text.
 Use `FailedCheckWithFailure` only when the code and message are explicitly safe
 public operational data.
+
+`SummarizeChecks` defensively copies the result slice and each result's
+`CheckedAt`, `Failure`, and `Attributes` fields.
 
 ### `CheckSummary`
 
@@ -829,6 +851,9 @@ type CommandResult struct {
 }
 ```
 
+`Result` is deliberately opaque and is not deep-copied. Mutable values stored in
+`Result` must remain immutable snapshots once returned.
+
 Constructors:
 
 ```go
@@ -935,8 +960,8 @@ registration validation, or constructor defaults without a major-version reason.
 
 ### Failure presentation migration
 
-The safe-failure change after `v0.2.0` is intentionally breaking and should be
-released with coordinated sibling-kit version bumps:
+The safe-failure change introduced in `v0.3.0` was intentionally breaking.
+Code migrating from `v0.2.0` or earlier should use these replacements:
 
 | Before | After |
 | --- | --- |

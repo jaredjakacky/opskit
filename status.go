@@ -82,3 +82,9 @@ func UnknownStatus(message string, attrs ...Attribute) Status {
 		Attributes: cloneAttributes(attrs),
 	}
 }
+
+func cloneStatus(status Status) Status {
+	status.UpdatedAt = cloneTimePtr(status.UpdatedAt)
+	status.Attributes = cloneAttributes(status.Attributes)
+	return status
+}
