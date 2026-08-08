@@ -531,7 +531,8 @@ make test-race
 make govulncheck
 ```
 
-`make verify` checks formatting, runs `go vet`, runs tests, and verifies that `go.mod` and `go.sum` are tidy.
+`make verify` checks formatting, runs `go vet`, runs tests, and verifies that
+every checked-in Go module is tidy.
 
 CI runs verification and race tests on the supported Go versions.
 
@@ -539,10 +540,10 @@ CI runs verification and race tests on the supported Go versions.
 
 Releases start from the repository's **Actions → Release → Run workflow**
 screen. Select `main` and enter the new semantic version, such as `v0.4.0`.
-The workflow validates that version and runs `make verify`, `make test-race`,
-and `make govulncheck` against the exact selected commit on every supported Go
-version. Only after all checks pass does it create the version tag and GitHub
-Release.
+The workflow validates that version against the module path and runs
+`make verify`, `make test-race`, and `make govulncheck` against the exact
+selected commit on every supported Go version. Only after all checks pass does
+it create the version tag and GitHub Release.
 
 Do not create or push `v*` tags manually; doing so would publish a Go module
 version without the release workflow's pre-publication checks.

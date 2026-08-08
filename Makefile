@@ -7,6 +7,8 @@ GOFILES := $(filter-out $(shell git ls-files --deleted -- '*.go'),$(shell git ls
 EXAMPLE_GOFILES := $(shell find examples -name '*.go' -print 2>/dev/null)
 GOVULNCHECK_VERSION ?= v1.6.0
 ALLOW_TIDY_CHANGES ?= 0
+RELEASE_CHECK_DIR := tools/releasecheck
+MODULE_FILES := go.mod go.sum $(RELEASE_CHECK_DIR)/go.mod $(RELEASE_CHECK_DIR)/go.sum
 
 # Keep build cache inside the repo so local runs are reproducible and do not
 # depend on a writable global cache path.
@@ -55,17 +57,20 @@ fmt-check: ## Verify tracked Go source files are formatted.
 		exit 1; \
 	fi
 
-vet: ## Run go vet on all packages.
+vet: ## Run go vet on all verified modules.
 	@echo "==> vet"
 	@$(GO) vet $(PKGS)
+	@GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) vet ./...
 
-test: ## Run tests for all packages.
+test: ## Run tests for all verified modules.
 	@echo "==> test"
 	@$(GO) test $(PKGS)
+	@GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) test ./...
 
-test-race: ## Run tests with the race detector enabled.
+test-race: ## Run tests for all verified modules with the race detector enabled.
 	@echo "==> test (race)"
 	@$(GO) test -race $(PKGS)
+	@GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) test -race ./...
 
 coverage: ## Run tests with coverage output written to coverage.out.
 	@echo "==> coverage"
@@ -74,24 +79,27 @@ coverage: ## Run tests with coverage output written to coverage.out.
 tidy: ## Run go mod tidy; fail if it changes go.mod/go.sum unless explicitly allowed.
 	@echo "==> tidy"
 	@if [ "$(ALLOW_TIDY_CHANGES)" != "1" ]; then \
-		before="$$(git diff -- go.mod go.sum)"; \
+		before="$$(git diff -- $(MODULE_FILES))"; \
 		$(GO) mod tidy; \
-		after="$$(git diff -- go.mod go.sum)"; \
+		GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) mod tidy; \
+		after="$$(git diff -- $(MODULE_FILES))"; \
 		if [ "$$before" != "$$after" ]; then \
-			echo "go mod tidy changed go.mod/go.sum. Commit the changes or rerun with ALLOW_TIDY_CHANGES=1."; \
-			git --no-pager diff -- go.mod go.sum || true; \
+			echo "go mod tidy changed module files. Commit the changes or rerun with ALLOW_TIDY_CHANGES=1."; \
+			git --no-pager diff -- $(MODULE_FILES) || true; \
 			exit 1; \
 		fi; \
 	else \
 		$(GO) mod tidy; \
+		GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) mod tidy; \
 	fi
 
 tidy-check: ## Verify go.mod/go.sum are already tidy.
 	@$(MAKE) tidy ALLOW_TIDY_CHANGES=0
 
-govulncheck: ## Run the pinned govulncheck tool against the main module packages.
+govulncheck: ## Run the pinned govulncheck tool against all verified modules.
 	@echo "==> govulncheck"
 	@$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) $(PKGS)
+	@GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 verify: fmt-check vet test build-examples tidy-check ## Run the local verification suite.
 	@echo "==> verification passed"
