@@ -531,8 +531,9 @@ make test-race
 make govulncheck
 ```
 
-`make verify` checks formatting, runs `go vet`, runs tests, and verifies that
-every checked-in Go module is tidy.
+`make verify` checks formatting, enforces that Opskit's root module has no
+external module dependencies, runs `go vet`, runs tests, and verifies that every
+checked-in Go module is tidy.
 
 CI runs verification and race tests on the supported Go versions.
 

@@ -20,6 +20,7 @@ export GOMODCACHE ?= $(CURDIR)/.cache/go-mod
 .PHONY: \
 	help \
 	build-examples \
+	dependency-boundary \
 	fmt \
 	fmt-check \
 	vet \
@@ -42,6 +43,15 @@ build-examples: ## Compile the runnable example programs.
 		$(GO) build ./examples/...; \
 	else \
 		echo "no example packages"; \
+	fi
+
+dependency-boundary: ## Ensure the root module has no external module dependencies.
+	@echo "==> checking dependency boundary"
+	@deps="$$(GOWORK=off $(GO) list -mod=readonly -m -f '{{if not .Main}}{{.Path}}{{end}}' all)" || exit $$?; \
+	if [ -n "$$deps" ]; then \
+		echo "Opskit's root module must not depend on external modules:"; \
+		echo "$$deps"; \
+		exit 1; \
 	fi
 
 fmt: ## Format tracked Go source files.
@@ -101,7 +111,7 @@ govulncheck: ## Run the pinned govulncheck tool against all verified modules.
 	@$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) $(PKGS)
 	@GOWORK=off $(GO) -C $(RELEASE_CHECK_DIR) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-verify: fmt-check vet test build-examples tidy-check ## Run the local verification suite.
+verify: fmt-check dependency-boundary vet test build-examples tidy-check ## Run the local verification suite.
 	@echo "==> verification passed"
 
 clean: ## Remove local build outputs and caches.
